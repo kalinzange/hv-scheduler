@@ -1,3 +1,4 @@
 .env
 !.env.vault
 node_modules/
+.DS_Store
