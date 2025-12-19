@@ -1890,7 +1890,9 @@ const ShiftScheduler = () => {
   const [langFilter, setLangFilter] = useState("All");
   const [shiftFilter, setShiftFilter] = useState("All");
   const [sortOrder, setSortOrder] = useState("OFFSET");
-  const [publishedOverrides, setPublishedOverrides] = useState<Record<string, OverrideType>>({});
+  const [publishedOverrides, setPublishedOverrides] = useState<
+    Record<string, OverrideType>
+  >({});
   const [hasUnpublishedChanges, setHasUnpublishedChanges] = useState(false);
 
   // -- STATE VARIABLES (Initialized with defaults) --
@@ -1924,7 +1926,10 @@ const ShiftScheduler = () => {
 
   // Track if manager has made changes since last publish
   useEffect(() => {
-    if (isManager && JSON.stringify(overrides) !== JSON.stringify(publishedOverrides)) {
+    if (
+      isManager &&
+      JSON.stringify(overrides) !== JSON.stringify(publishedOverrides)
+    ) {
       setHasUnpublishedChanges(true);
     } else {
       setHasUnpublishedChanges(false);
@@ -1991,7 +1996,8 @@ const ShiftScheduler = () => {
           if (data.legends) setLegends(data.legends);
           if (data.colors) setColors(data.colors);
           if (data.overrides) setOverrides(data.overrides);
-          if (data.publishedOverrides) setPublishedOverrides(data.publishedOverrides);
+          if (data.publishedOverrides)
+            setPublishedOverrides(data.publishedOverrides);
           else if (data.overrides) setPublishedOverrides(data.overrides); // Fallback for old data
           if (data.config) setConfig(data.config);
           if (data.hoursConfig) setHoursConfig(data.hoursConfig);
@@ -2901,10 +2907,17 @@ const ShiftScheduler = () => {
                     ? "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 cursor-pointer"
                     : "bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed"
                 }`}
-                title={hasUnpublishedChanges ? "Publish schedule to viewers" : "No unpublished changes"}
+                title={
+                  hasUnpublishedChanges
+                    ? "Publish schedule to viewers"
+                    : "No unpublished changes"
+                }
               >
                 <Upload size={16} className="mr-2" />
-                Publish {hasUnpublishedChanges && <span className="ml-1 font-bold">*</span>}
+                Publish{" "}
+                {hasUnpublishedChanges && (
+                  <span className="ml-1 font-bold">*</span>
+                )}
               </button>
             )}
 
