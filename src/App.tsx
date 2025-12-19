@@ -552,6 +552,20 @@ const checkRestViolation = (prev: ShiftType, curr: ShiftType): boolean => {
   return false;
 };
 
+// Check if employee has 5 consecutive working days
+const checkOverflow = (shifts: OverrideType[], index: number): boolean => {
+  if (index < 4) return false; // Need at least 5 days worth of data
+
+  // Check current day and 4 previous days
+  for (let i = index - 4; i <= index; i++) {
+    const shift = shifts[i];
+    if (shift === "F" || shift === "V" || shift === "S") {
+      return false; // Found a non-working day
+    }
+  }
+  return true;
+};
+
 // --- COMPONENTS ---
 
 const RequestsModal = ({
@@ -3139,6 +3153,9 @@ const ShiftScheduler = () => {
                 const isMyRow = loggedInUserId === emp.id;
                 const isDimmed = currentUser.role === "editor" && !isMyRow;
 
+                // Get all shifts for this employee for overflow check
+                const empShifts = calendarData.map((day) => day.shifts[emp.id]);
+
                 return (
                   <tr
                     key={emp.id}
@@ -3187,6 +3204,7 @@ const ShiftScheduler = () => {
                           prevShift as ShiftType,
                           shift as ShiftType
                         );
+                      const isOverflow = checkOverflow(empShifts, dIdx);
                       const isPending = day.pendingReqs[emp.id]; // Check for pending
                       prevShift = shift as ShiftType;
 
@@ -3211,7 +3229,9 @@ const ShiftScheduler = () => {
                             className={`
                               w-full h-8 rounded flex items-center justify-center text-xs font-bold shadow-sm print:shadow-none print:rounded-none border 
                               ${
-                                isRestViolation
+                                isOverflow
+                                  ? "ring-2 ring-red-500 z-10"
+                                  : isRestViolation
                                   ? "ring-2 ring-orange-500 z-10"
                                   : ""
                               }
@@ -3223,7 +3243,9 @@ const ShiftScheduler = () => {
                             `}
                             style={getShiftStyle(shift)}
                             title={
-                              isPending
+                              isOverflow
+                                ? "Overflow (>40h)"
+                                : isPending
                                 ? t.pending
                                 : isRestViolation
                                 ? t.restWarn
@@ -3236,7 +3258,13 @@ const ShiftScheduler = () => {
                               </div>
                             )}
                             {shift === "F" ? "" : shift}
-                            {isRestViolation && !isPending && (
+                            {isOverflow && !isPending && (
+                              <AlertCircle
+                                size={10}
+                                className="absolute top-0 right-0 text-red-600 bg-white rounded-full"
+                              />
+                            )}
+                            {isRestViolation && !isPending && !isOverflow && (
                               <AlertCircle
                                 size={10}
                                 className="absolute top-0 right-0 text-orange-600 bg-white rounded-full"
