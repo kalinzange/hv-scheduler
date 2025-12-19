@@ -2415,7 +2415,6 @@ const ShiftScheduler = () => {
         return;
       }
       setOverrides(applyToEmp(empId));
-      alert(t.bulkSuccess);
     } else if (targetId === "ALL") {
       if (!isManager) {
         alert(t.permissionDenied);
@@ -2435,7 +2434,6 @@ const ShiftScheduler = () => {
         }
       });
       setOverrides(batchOverrides);
-      alert(t.bulkSuccess);
     }
   };
 
@@ -2602,6 +2600,26 @@ const ShiftScheduler = () => {
     month: "long",
     year: "numeric",
   });
+
+  // Helper function to get shift display name
+  const getShiftName = (shift: OverrideType): string => {
+    switch (shift) {
+      case "M":
+        return "Morning";
+      case "T":
+        return "Afternoon";
+      case "N":
+        return "Night";
+      case "F":
+        return "Off Day";
+      case "V":
+        return "Holiday";
+      case "S":
+        return "Sick Leave";
+      default:
+        return shift;
+    }
+  };
 
   // Get weeks that contain at least one shift (for print filtering)
   const weeksWithShifts = useMemo(() => {
@@ -3142,6 +3160,38 @@ const ShiftScheduler = () => {
               <option value="N">Night (N)</option>
             </select>
 
+            {/* Inline Shift Legend */}
+            <div className="flex items-center gap-2 ml-3 pl-3 border-l">
+              <div
+                className="w-5 h-5 rounded border font-bold flex items-center justify-center text-[10px]"
+                style={getShiftStyle("M")}
+                title={`Morning: ${legends.M}`}
+              >
+                M
+              </div>
+              <div
+                className="w-5 h-5 rounded border font-bold flex items-center justify-center text-[10px]"
+                style={getShiftStyle("T")}
+                title={`Afternoon: ${legends.T}`}
+              >
+                T
+              </div>
+              <div
+                className="w-5 h-5 rounded border font-bold flex items-center justify-center text-[10px]"
+                style={getShiftStyle("N")}
+                title={`Night: ${legends.N}`}
+              >
+                N
+              </div>
+              <div
+                className="w-5 h-5 rounded border font-bold flex items-center justify-center text-[10px]"
+                style={getShiftStyle("F")}
+                title="Off Day"
+              >
+                F
+              </div>
+            </div>
+
             <div className="flex items-center gap-2 text-xs text-gray-600 ml-4 border-l pl-4">
               {sortOrder === "OFFSET" && (
                 <ArrowDownAZ size={14} className="text-gray-400" />
@@ -3399,12 +3449,14 @@ const ShiftScheduler = () => {
                             style={getShiftStyle(shift)}
                             title={
                               shiftOverflowInfo.hasShiftOverflow
-                                ? "ShiftOverflow (>40h)"
+                                ? `${getShiftName(
+                                    shift
+                                  )} - ShiftOverflow (>40h)`
                                 : isPending
-                                ? t.pending
+                                ? `${getShiftName(shift)} - ${t.pending}`
                                 : isRestViolation
-                                ? t.restWarn
-                                : ""
+                                ? `${getShiftName(shift)} - ${t.restWarn}`
+                                : getShiftName(shift)
                             }
                           >
                             {isPending && (
