@@ -2598,6 +2598,11 @@ const ShiftScheduler = () => {
       new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1)
     );
 
+  const monthLabel = currentDate.toLocaleDateString("en-GB", {
+    month: "long",
+    year: "numeric",
+  });
+
   // Get weeks that contain at least one shift (for print filtering)
   const weeksWithShifts = useMemo(() => {
     const weeks: Set<number> = new Set();
@@ -2690,23 +2695,50 @@ const ShiftScheduler = () => {
         return;
       }
 
-      // Add a temporary class to handle oklch color compatibility
-      const originalClass = element.className;
-      element.classList.add("export-image-mode");
+      // Clone the element to avoid modifying the original
+      const clone = element.cloneNode(true) as HTMLElement;
 
-      // Add temporary style to handle oklch colors (html2canvas compatibility)
-      const style = document.createElement("style");
-      style.innerHTML = `
-        .export-image-mode * {
-          color: rgb(0, 0, 0) !important;
-        }
-      `;
-      document.head.appendChild(style);
+      // Function to recursively remove problematic Tailwind classes
+      const removeProblematicClasses = (el: HTMLElement) => {
+        // List of Tailwind classes that might contain oklch or other unsupported colors
+        const problematicPatterns = [
+          /text-\w+-\d+/, // text colors
+          /bg-\w+-\d+/, // background colors
+          /border-\w+-\d+/, // border colors
+          /ring-\w+-\d+/, // ring colors
+          /divide-\w+-\d+/, // divide colors
+          /from-\w+-\d+/, // gradient from
+          /to-\w+-\d+/, // gradient to
+          /via-\w+-\d+/, // gradient via
+        ];
+
+        Array.from(el.classList).forEach((cls) => {
+          if (problematicPatterns.some((pattern) => pattern.test(cls))) {
+            el.classList.remove(cls);
+          }
+        });
+
+        // Recursively process children
+        Array.from(el.children).forEach((child) => {
+          removeProblematicClasses(child as HTMLElement);
+        });
+      };
+
+      // Remove problematic classes from clone
+      removeProblematicClasses(clone);
+
+      // Append clone to body temporarily
+      const container = document.createElement("div");
+      container.style.position = "fixed";
+      container.style.left = "-9999px";
+      container.style.top = "-9999px";
+      container.appendChild(clone);
+      document.body.appendChild(container);
 
       // Wait a bit for the DOM to update
       setTimeout(async () => {
         try {
-          const canvas = await html2canvas(element, {
+          const canvas = await html2canvas(clone, {
             scale: 2,
             useCORS: true,
             logging: false,
@@ -2728,9 +2760,8 @@ const ShiftScheduler = () => {
           console.error("Error exporting image:", err);
           alert("Error exporting image. Please try again.");
         } finally {
-          // Restore original state
-          element.className = originalClass;
-          document.head.removeChild(style);
+          // Clean up the temporary container
+          document.body.removeChild(container);
         }
       }, 100);
     } catch (err) {
@@ -2739,10 +2770,6 @@ const ShiftScheduler = () => {
     }
   };
 
-  const monthLabel = currentDate.toLocaleDateString("en-GB", {
-    month: "long",
-    year: "numeric",
-  });
   const roles = useMemo(
     () => Array.from(new Set(teamState.map((e) => e.role))),
     [teamState]
