@@ -2690,8 +2690,18 @@ const ShiftScheduler = () => {
         return;
       }
 
-      // Temporarily set print mode to filter out weeks without shifts
-      document.body.classList.add("print-mode");
+      // Add a temporary class to handle oklch color compatibility
+      const originalClass = element.className;
+      element.classList.add("export-image-mode");
+
+      // Add temporary style to handle oklch colors (html2canvas compatibility)
+      const style = document.createElement("style");
+      style.innerHTML = `
+        .export-image-mode * {
+          color: rgb(0, 0, 0) !important;
+        }
+      `;
+      document.head.appendChild(style);
 
       // Wait a bit for the DOM to update
       setTimeout(async () => {
@@ -2701,6 +2711,7 @@ const ShiftScheduler = () => {
             useCORS: true,
             logging: false,
             backgroundColor: "#ffffff",
+            allowTaint: true,
           });
 
           const link = document.createElement("a");
@@ -2715,16 +2726,16 @@ const ShiftScheduler = () => {
           document.body.removeChild(link);
         } catch (err) {
           console.error("Error exporting image:", err);
-          alert("Error exporting image");
+          alert("Error exporting image. Please try again.");
         } finally {
-          document.body.classList.remove("print-mode");
+          // Restore original state
+          element.className = originalClass;
+          document.head.removeChild(style);
         }
       }, 100);
     } catch (err) {
       console.error("Error loading html2canvas:", err);
-      alert(
-        "Please ensure html2canvas library is installed. Run: npm install html2canvas"
-      );
+      alert("Error with export library. Please try again.");
     }
   };
 
