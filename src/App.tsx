@@ -2598,6 +2598,22 @@ const ShiftScheduler = () => {
       new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1)
     );
 
+  // Get weeks that contain at least one shift (for print filtering)
+  const weeksWithShifts = useMemo(() => {
+    const weeks: Set<number> = new Set();
+    calendarData.forEach((day, idx) => {
+      const hasShift = filteredTeam.some((emp) => {
+        const shift = day.shifts[emp.id];
+        return ["M", "T", "N"].includes(shift);
+      });
+      if (hasShift) {
+        const weekStart = idx - (idx % 7); // Get Monday of the week
+        weeks.add(weekStart);
+      }
+    });
+    return weeks;
+  }, [calendarData, filteredTeam]);
+
   const handleExportCSV = () => {
     const headers = [
       t.colaborador,
@@ -2662,6 +2678,56 @@ const ShiftScheduler = () => {
     };
   };
 
+  const handleExportImage = async (format: "png" | "jpeg") => {
+    try {
+      // Dynamically import html2canvas
+      // @ts-ignore
+      const html2canvas = (await import("html2canvas")).default;
+
+      const element = document.querySelector("table");
+      if (!element) {
+        alert("Could not find table to export");
+        return;
+      }
+
+      // Temporarily set print mode to filter out weeks without shifts
+      document.body.classList.add("print-mode");
+
+      // Wait a bit for the DOM to update
+      setTimeout(async () => {
+        try {
+          const canvas = await html2canvas(element, {
+            scale: 2,
+            useCORS: true,
+            logging: false,
+            backgroundColor: "#ffffff",
+          });
+
+          const link = document.createElement("a");
+          link.href = canvas.toDataURL(
+            `image/${format === "jpeg" ? "jpeg" : "png"}`
+          );
+          link.download = `schedule_${
+            currentDate.getMonth() + 1
+          }_${currentDate.getFullYear()}.${format}`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        } catch (err) {
+          console.error("Error exporting image:", err);
+          alert("Error exporting image");
+        } finally {
+          document.body.classList.remove("print-mode");
+        }
+      }, 100);
+    } catch (err) {
+      console.error("Error loading html2canvas:", err);
+      alert(
+        "Please ensure html2canvas library is installed. Run: npm install html2canvas"
+      );
+    }
+  };
+
   const monthLabel = currentDate.toLocaleDateString("en-GB", {
     month: "long",
     year: "numeric",
@@ -2702,7 +2768,14 @@ const ShiftScheduler = () => {
 
   return (
     <div className="flex flex-col h-screen bg-gray-50 text-sm font-sans relative overflow-hidden print:overflow-visible print:bg-white print:h-auto">
-      <style>{`@media print { @page { size: landscape; margin: 10mm; } .print\\:hidden { display: none !important; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }`}</style>
+      <style>{`
+        @media print { 
+          @page { size: landscape; margin: 10mm; } 
+          .print\\:hidden { display: none !important; } 
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .no-shift-week { display: none !important; }
+        }
+      `}</style>
 
       {/* --- BARRA DE PERMISSÕES & CLOUD --- */}
       <div className="bg-slate-900 text-white p-2 shadow-lg z-30 print:hidden flex justify-between items-center px-6">
@@ -2929,6 +3002,20 @@ const ShiftScheduler = () => {
             >
               <Printer size={16} className="mr-2" /> {t.print}
             </button>
+            <button
+              onClick={() => handleExportImage("png")}
+              className="flex items-center px-3 py-2 bg-sky-50 text-sky-700 rounded hover:bg-sky-100 transition border border-sky-200"
+              title="Export as PNG"
+            >
+              <Download size={16} className="mr-2" /> PNG
+            </button>
+            <button
+              onClick={() => handleExportImage("jpeg")}
+              className="flex items-center px-3 py-2 bg-rose-50 text-rose-700 rounded hover:bg-rose-100 transition border border-rose-200"
+              title="Export as JPEG"
+            >
+              <Download size={16} className="mr-2" /> JPEG
+            </button>
 
             {isManager && (
               <button
@@ -3145,23 +3232,29 @@ const ShiftScheduler = () => {
                     )}
                   </div>
                 </th>
-                {calendarData.map((day) => (
-                  <th
-                    key={day.date}
-                    className={`p-1 border-b border-r min-w-[30px] text-center relative ${
-                      day.isWeekend ? "bg-indigo-50 print:bg-gray-100" : ""
-                    } ${
-                      day.isPtHoliday ? "bg-red-50 print:bg-gray-200" : ""
-                    } print:border-black`}
-                  >
-                    <div className="text-xs font-bold text-gray-700 print:text-black">
-                      {day.date}
-                    </div>
-                    <div className="text-[9px] text-gray-500 uppercase print:text-black">
-                      {day.weekDay}
-                    </div>
-                  </th>
-                ))}
+                {calendarData.map((day, dIdx) => {
+                  const weekStart = dIdx - (dIdx % 7);
+                  const isWeekWithShift = weeksWithShifts.has(weekStart);
+                  return (
+                    <th
+                      key={day.date}
+                      className={`p-1 border-b border-r min-w-[30px] text-center relative ${
+                        !isWeekWithShift ? "no-shift-week" : ""
+                      } ${
+                        day.isWeekend ? "bg-indigo-50 print:bg-gray-100" : ""
+                      } ${
+                        day.isPtHoliday ? "bg-red-50 print:bg-gray-200" : ""
+                      } print:border-black`}
+                    >
+                      <div className="text-xs font-bold text-gray-700 print:text-black">
+                        {day.date}
+                      </div>
+                      <div className="text-[9px] text-gray-500 uppercase print:text-black">
+                        {day.weekDay}
+                      </div>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
@@ -3216,6 +3309,8 @@ const ShiftScheduler = () => {
                     </td>
                     {calendarData.map((day, dIdx) => {
                       const shift = day.shifts[emp.id];
+                      const weekStart = dIdx - (dIdx % 7);
+                      const isWeekWithShift = weeksWithShifts.has(weekStart);
                       const isRestViolation =
                         dIdx > 0 &&
                         checkRestViolation(
@@ -3239,6 +3334,7 @@ const ShiftScheduler = () => {
                           }
                           className={`
                             border-b border-r p-0.5 text-center transition print:cursor-default relative
+                            ${!isWeekWithShift ? "no-shift-week" : ""}
                             ${
                               canClick
                                 ? "cursor-pointer hover:opacity-80"
