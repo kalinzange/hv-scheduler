@@ -3125,40 +3125,169 @@ const ShiftScheduler = () => {
               <Filter size={14} />
               <span className="font-bold">{t.filters}:</span>
             </div>
-            <select
-              value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value)}
-              className="text-xs border rounded p-1"
-            >
-              <option value="All">{t.all} Roles</option>
-              {roles.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-            <select
-              value={langFilter}
-              onChange={(e) => setLangFilter(e.target.value)}
-              className="text-xs border rounded p-1"
-            >
-              <option value="All">{t.all} Languages</option>
-              {ALL_LANGUAGES.map((l) => (
-                <option key={l} value={l}>
-                  {l}
-                </option>
-              ))}
-            </select>
-            <select
-              value={shiftFilter}
-              onChange={(e) => setShiftFilter(e.target.value)}
-              className="text-xs border rounded p-1"
-            >
-              <option value="All">{t.all} Shifts</option>
-              <option value="M">Morning (M)</option>
-              <option value="T">Afternoon (T)</option>
-              <option value="N">Night (N)</option>
-            </select>
+            {/* Role radio group */}
+            <div className="flex items-center gap-2">
+              <div className="text-xs font-semibold text-gray-600 mr-2">
+                {t.all}:
+              </div>
+              <div className="flex items-center gap-2">
+                <label
+                  className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border ${
+                    roleFilter === "All"
+                      ? "bg-indigo-600 text-white border-indigo-600"
+                      : "bg-white text-gray-700"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="roleFilter"
+                    value="All"
+                    checked={roleFilter === "All"}
+                    onChange={() => setRoleFilter("All")}
+                    className="sr-only"
+                  />
+                  All
+                </label>
+                {roles.map((r) => (
+                  <label
+                    key={r}
+                    className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border ${
+                      roleFilter === r
+                        ? "bg-indigo-600 text-white border-indigo-600"
+                        : "bg-white text-gray-700"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="roleFilter"
+                      value={r}
+                      checked={roleFilter === r}
+                      onChange={() => setRoleFilter(r)}
+                      className="sr-only"
+                    />
+                    {r}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Language radio group (horizontal scroll if many) */}
+            <div className="flex items-center gap-2 max-w-xs overflow-x-auto">
+              <div className="text-xs font-semibold text-gray-600 mr-2">
+                {t.linguas}:
+              </div>
+              <div className="flex items-center gap-2">
+                <label
+                  className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border ${
+                    langFilter === "All"
+                      ? "bg-indigo-600 text-white border-indigo-600"
+                      : "bg-white text-gray-700"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="langFilter"
+                    value="All"
+                    checked={langFilter === "All"}
+                    onChange={() => setLangFilter("All")}
+                    className="sr-only"
+                  />
+                  {t.all}
+                </label>
+                {ALL_LANGUAGES.map((l) => (
+                  <label
+                    key={l}
+                    className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border ${
+                      langFilter === l
+                        ? "bg-indigo-600 text-white border-indigo-600"
+                        : "bg-white text-gray-700"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="langFilter"
+                      value={l}
+                      checked={langFilter === l}
+                      onChange={() => setLangFilter(l)}
+                      className="sr-only"
+                    />
+                    {l}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Shift radio group */}
+            <div className="flex items-center gap-2">
+              <label
+                className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border ${
+                  shiftFilter === "All"
+                    ? "bg-indigo-600 text-white border-indigo-600"
+                    : "bg-white text-gray-700"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="shiftFilter"
+                  value="All"
+                  checked={shiftFilter === "All"}
+                  onChange={() => setShiftFilter("All")}
+                  className="sr-only"
+                />
+                {t.all}
+              </label>
+              <label
+                className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border ${
+                  shiftFilter === "M"
+                    ? "bg-indigo-600 text-white border-indigo-600"
+                    : "bg-white text-gray-700"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="shiftFilter"
+                  value="M"
+                  checked={shiftFilter === "M"}
+                  onChange={() => setShiftFilter("M")}
+                  className="sr-only"
+                />
+                M
+              </label>
+              <label
+                className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border ${
+                  shiftFilter === "T"
+                    ? "bg-indigo-600 text-white border-indigo-600"
+                    : "bg-white text-gray-700"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="shiftFilter"
+                  value="T"
+                  checked={shiftFilter === "T"}
+                  onChange={() => setShiftFilter("T")}
+                  className="sr-only"
+                />
+                T
+              </label>
+              <label
+                className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border ${
+                  shiftFilter === "N"
+                    ? "bg-indigo-600 text-white border-indigo-600"
+                    : "bg-white text-gray-700"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="shiftFilter"
+                  value="N"
+                  checked={shiftFilter === "N"}
+                  onChange={() => setShiftFilter("N")}
+                  className="sr-only"
+                />
+                N
+              </label>
+            </div>
 
             {/* Inline Shift Legend */}
             <div className="flex items-center gap-2 ml-3 pl-3 border-l">
