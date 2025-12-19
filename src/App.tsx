@@ -184,6 +184,7 @@ const TRANSLATIONS = {
     filters: "Filters",
     roleFilter: "Role",
     langFilter: "Language",
+    shiftFilter: "Shift",
     sort: "Sort",
     sortDefault: "Default",
     sortAZ: "Name (A-Z)",
@@ -1887,7 +1888,10 @@ const ShiftScheduler = () => {
 
   const [roleFilter, setRoleFilter] = useState("All");
   const [langFilter, setLangFilter] = useState("All");
+  const [shiftFilter, setShiftFilter] = useState("All");
   const [sortOrder, setSortOrder] = useState("OFFSET");
+  const [publishedOverrides, setPublishedOverrides] = useState<Record<string, OverrideType>>({});
+  const [hasUnpublishedChanges, setHasUnpublishedChanges] = useState(false);
 
   // -- STATE VARIABLES (Initialized with defaults) --
   const [startDateStr, setStartDateStr] = useState("2025-12-15");
@@ -1917,6 +1921,16 @@ const ShiftScheduler = () => {
     S: "#e5e7eb",
   });
   const [overrides, setOverrides] = useState<Record<string, OverrideType>>({});
+
+  // Track if manager has made changes since last publish
+  useEffect(() => {
+    if (isManager && JSON.stringify(overrides) !== JSON.stringify(publishedOverrides)) {
+      setHasUnpublishedChanges(true);
+    } else {
+      setHasUnpublishedChanges(false);
+    }
+  }, [overrides, publishedOverrides, isManager]);
+
   const [config, setConfig] = useState<RotationConfig>({
     morningDays: 5,
     afternoonDays: 5,
@@ -1977,6 +1991,8 @@ const ShiftScheduler = () => {
           if (data.legends) setLegends(data.legends);
           if (data.colors) setColors(data.colors);
           if (data.overrides) setOverrides(data.overrides);
+          if (data.publishedOverrides) setPublishedOverrides(data.publishedOverrides);
+          else if (data.overrides) setPublishedOverrides(data.overrides); // Fallback for old data
           if (data.config) setConfig(data.config);
           if (data.hoursConfig) setHoursConfig(data.hoursConfig);
           if (data.team) setTeamState(data.team);
@@ -2037,6 +2053,7 @@ const ShiftScheduler = () => {
           legends,
           colors,
           overrides,
+          publishedOverrides,
           config,
           hoursConfig,
           team: teamState,
@@ -2073,9 +2090,15 @@ const ShiftScheduler = () => {
       setStartDateStr("2025-12-15");
       setHolidays(DEFAULT_HOLIDAYS);
       setOverrides({});
+      setPublishedOverrides({});
       setRequests([]);
       window.location.reload();
     }
+  };
+
+  const handlePublish = () => {
+    setPublishedOverrides({ ...overrides });
+    setHasUnpublishedChanges(false);
   };
 
   // Login Handling
@@ -2196,6 +2219,18 @@ const ShiftScheduler = () => {
             });
             setOverrides(normalizedOverrides);
           }
+          if (s.publishedOverrides) {
+            const normalizedPublished: Record<string, OverrideType> = {};
+            Object.entries(s.publishedOverrides).forEach(([key, val]) => {
+              const [empId, rawDate] = key.split("_");
+              const cleanDate = rawDate.includes("T")
+                ? rawDate.split("T")[0]
+                : rawDate;
+              normalizedPublished[`${empId}_${cleanDate}`] =
+                val as OverrideType;
+            });
+            setPublishedOverrides(normalizedPublished);
+          }
 
           if (s.config) setConfig(s.config);
           if (s.hoursConfig) setHoursConfig(s.hoursConfig);
@@ -2218,12 +2253,24 @@ const ShiftScheduler = () => {
   const startDate = useMemo(() => new Date(startDateStr), [startDateStr]);
   const rotationPattern = useMemo(() => generatePattern(config), [config]);
 
+  // Use publishedOverrides for non-managers, draftOverrides for managers
+  const effectiveOverrides = isManager ? overrides : publishedOverrides;
+
   const filteredTeam = useMemo(() => {
     let result = teamState.filter((emp) => {
       const roleMatch = roleFilter === "All" || emp.role === roleFilter;
       const langMatch =
         langFilter === "All" || emp.languages.includes(langFilter as Language);
-      return roleMatch && langMatch;
+
+      let shiftMatch = true;
+      if (shiftFilter !== "All") {
+        // Get the current shift for this employee
+        const dateKey = `${emp.id}_${startDateStr}`;
+        const currentShift = effectiveOverrides[dateKey] || rotationPattern[0];
+        shiftMatch = currentShift === shiftFilter;
+      }
+
+      return roleMatch && langMatch && shiftMatch;
     });
 
     if (sortOrder === "AZ") {
@@ -2241,7 +2288,16 @@ const ShiftScheduler = () => {
     }
 
     return result;
-  }, [teamState, roleFilter, langFilter, sortOrder]);
+  }, [
+    teamState,
+    roleFilter,
+    langFilter,
+    shiftFilter,
+    sortOrder,
+    startDateStr,
+    effectiveOverrides,
+    rotationPattern,
+  ]);
 
   const handleCellClick = (
     e: React.MouseEvent,
@@ -2376,8 +2432,8 @@ const ShiftScheduler = () => {
         );
         pendingReqs[emp.id] = hasPending;
 
-        if (overrides[overrideKey]) {
-          shift = overrides[overrideKey];
+        if (effectiveOverrides[overrideKey]) {
+          shift = effectiveOverrides[overrideKey];
         } else {
           shift = getShiftForDate(
             dateObj,
@@ -2388,7 +2444,7 @@ const ShiftScheduler = () => {
         }
 
         if (
-          !overrides[overrideKey] &&
+          !effectiveOverrides[overrideKey] &&
           emp.rotationMode &&
           emp.rotationMode !== "STANDARD" &&
           shift !== "F"
@@ -2449,7 +2505,7 @@ const ShiftScheduler = () => {
     minStaff,
     requiredLangs,
     weekendDays,
-    overrides,
+    effectiveOverrides,
     requests,
   ]);
 
@@ -2836,6 +2892,22 @@ const ShiftScheduler = () => {
               <Printer size={16} className="mr-2" /> {t.print}
             </button>
 
+            {isManager && (
+              <button
+                onClick={handlePublish}
+                disabled={!hasUnpublishedChanges}
+                className={`flex items-center px-3 py-2 rounded transition border ${
+                  hasUnpublishedChanges
+                    ? "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 cursor-pointer"
+                    : "bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed"
+                }`}
+                title={hasUnpublishedChanges ? "Publish schedule to viewers" : "No unpublished changes"}
+              >
+                <Upload size={16} className="mr-2" />
+                Publish {hasUnpublishedChanges && <span className="ml-1 font-bold">*</span>}
+              </button>
+            )}
+
             {canAccessSettings ? (
               <button
                 onClick={() => setShowConfig(!showConfig)}
@@ -2888,6 +2960,16 @@ const ShiftScheduler = () => {
                   {l}
                 </option>
               ))}
+            </select>
+            <select
+              value={shiftFilter}
+              onChange={(e) => setShiftFilter(e.target.value)}
+              className="text-xs border rounded p-1"
+            >
+              <option value="All">{t.all} Shifts</option>
+              <option value="M">Morning (M)</option>
+              <option value="T">Afternoon (T)</option>
+              <option value="N">Night (N)</option>
             </select>
 
             <div className="flex items-center gap-2 text-xs text-gray-600 ml-4 border-l pl-4">
