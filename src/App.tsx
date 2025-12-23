@@ -1889,6 +1889,9 @@ const ShiftScheduler = () => {
     "saved" | "saving" | "error" | "offline"
   >("offline");
   const [currentDate, setCurrentDate] = useState(new Date(2025, 11, 15));
+  const [visibleMonthDate, setVisibleMonthDate] = useState<Date>(
+    new Date(2025, 11, 15)
+  );
   const [showConfig, setShowConfig] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [showAnnual, setShowAnnual] = useState(false);
@@ -1914,6 +1917,13 @@ const ShiftScheduler = () => {
   // Ref to prevent infinite loops between Firebase sync and local save
   const isRemoteUpdate = useRef(false);
 
+  // ref to calendar scroll container and extra-days flag to append next-month days
+  const calendarRef = useRef<HTMLDivElement | null>(null);
+  const [nextMonthExtraDays, setNextMonthExtraDays] = useState(0);
+  const lastAutoRef = useRef<number>(0);
+  const hasAppendedRef = useRef(false);
+  const savedScrollRef = useRef<number>(0);
+
   const canWrite = currentUser.permissions.includes("write");
   const canAccessSettings = currentUser.role === "manager" || canWrite;
   const isManager = currentUser.role === "manager";
@@ -1922,6 +1932,10 @@ const ShiftScheduler = () => {
   const [langFilter, setLangFilter] = useState("All");
   const [shiftFilter, setShiftFilter] = useState("All");
   const [sortOrder, setSortOrder] = useState("OFFSET");
+  const [focusedDate, setFocusedDate] = useState<string | null>(null);
+  const [focusedEmployeeId, setFocusedEmployeeId] = useState<number | null>(
+    null
+  );
   const [publishedOverrides, setPublishedOverrides] = useState<
     Record<string, OverrideType>
   >({});
@@ -2531,6 +2545,102 @@ const ShiftScheduler = () => {
           lowStaff.N,
       });
     }
+    // If requested, append a number of days from the next month so the table
+    // can display an overlapping range (e.g., Dec 25 - Jan 4)
+    if (nextMonthExtraDays && nextMonthExtraDays > 0) {
+      const nextMonthDate = new Date(year, month + 1, 1);
+      const nextYear = nextMonthDate.getFullYear();
+      const nextMonth = nextMonthDate.getMonth();
+      const daysInNext = getDaysInMonth(nextYear, nextMonth);
+      const toAdd = Math.min(nextMonthExtraDays, daysInNext);
+      for (let d = 1; d <= toAdd; d++) {
+        const dateObj = new Date(nextYear, nextMonth, d);
+        const dateStr = getDateKey(dateObj);
+        const isWeekend = weekendDays.includes(dateObj.getDay());
+        const isPtHoliday = holidays.includes(dateStr);
+
+        const shifts: Record<string, OverrideType> = {};
+        const pendingReqs: Record<string, boolean> = {};
+        const coverage = {
+          M: new Set<Language>(),
+          T: new Set<Language>(),
+          N: new Set<Language>(),
+        };
+        const counts = { M: 0, T: 0, N: 0 };
+
+        teamState.forEach((emp) => {
+          const overrideKey = `${emp.id}_${dateStr}`;
+          let shift: OverrideType;
+          const hasPending = requests.some(
+            (r) =>
+              r.empId === emp.id && r.date === dateStr && r.status === "PENDING"
+          );
+          pendingReqs[emp.id] = hasPending;
+
+          if (effectiveOverrides[overrideKey]) {
+            shift = effectiveOverrides[overrideKey];
+          } else {
+            shift = getShiftForDate(
+              dateObj,
+              emp.offset,
+              rotationPattern,
+              startDate
+            );
+          }
+
+          if (
+            !effectiveOverrides[overrideKey] &&
+            emp.rotationMode &&
+            emp.rotationMode !== "STANDARD" &&
+            shift !== "F"
+          ) {
+            if (emp.rotationMode === "FIXED_M") shift = "M";
+            if (emp.rotationMode === "FIXED_T") shift = "T";
+            if (emp.rotationMode === "FIXED_N") shift = "N";
+          }
+          shifts[emp.id] = shift;
+          if (["M", "T", "N"].includes(shift)) {
+            emp.languages.forEach((lang) =>
+              coverage[shift as "M" | "T" | "N"].add(lang)
+            );
+            counts[shift as "M" | "T" | "N"]++;
+          }
+        });
+
+        const missing = {
+          M: requiredLangs.filter((l) => !coverage.M.has(l)),
+          T: requiredLangs.filter((l) => !coverage.T.has(l)),
+          N: requiredLangs.filter((l) => !coverage.N.has(l)),
+        };
+        const lowStaff = {
+          M: counts.M < minStaff.M,
+          T: counts.T < minStaff.T,
+          N: counts.N < minStaff.N,
+        };
+
+        days.push({
+          date: d,
+          fullDate: dateStr,
+          weekDay: dateObj
+            .toLocaleDateString(locale, { weekday: "short" })
+            .slice(0, 3),
+          isWeekend,
+          isPtHoliday,
+          shifts,
+          missing,
+          lowStaff,
+          counts,
+          pendingReqs,
+          hasIssues:
+            missing.M.length > 0 ||
+            missing.T.length > 0 ||
+            missing.N.length > 0 ||
+            lowStaff.M ||
+            lowStaff.T ||
+            lowStaff.N,
+        });
+      }
+    }
     return days;
   }, [
     currentDate,
@@ -2543,7 +2653,130 @@ const ShiftScheduler = () => {
     weekendDays,
     effectiveOverrides,
     requests,
+    nextMonthExtraDays,
   ]);
+
+  // Auto-append next-month days when user scrolls to right edge of calendar
+  useEffect(() => {
+    const el = calendarRef.current;
+    if (!el) return;
+
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        try {
+          const threshold = 40;
+          if (el.scrollLeft + el.clientWidth >= el.scrollWidth - threshold) {
+            const now = Date.now();
+            if (now - lastAutoRef.current > 900) {
+              lastAutoRef.current = now;
+              // Append 11 days by default so user can view end of month + early next month
+              setNextMonthExtraDays(11);
+            }
+          }
+        } finally {
+          ticking = false;
+        }
+      });
+    };
+
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll as any);
+  }, [calendarRef, currentDate, teamState, rotationPattern, startDate]);
+
+  // Auto-detect visible month and append next-month days when user stops scrolling
+  useEffect(() => {
+    const el = calendarRef.current;
+    if (!el) return;
+
+    let scrollTimeout: number | null = null;
+
+    const onScrollEnd = () => {
+      const ths = el.querySelectorAll("table thead th");
+      if (!ths || ths.length <= 1) return;
+      const dayThs = Array.from(ths).slice(1) as HTMLElement[]; // skip sticky left column
+      const stickyTh = ths[0] as HTMLElement | undefined;
+      const stickyWidth = stickyTh ? stickyTh.offsetWidth : 0;
+
+      let lastVisibleIdx = -1;
+      let firstVisibleIdx = -1;
+      dayThs.forEach((th, idx) => {
+        const thLeft = th.offsetLeft;
+        const thRight = thLeft + th.offsetWidth;
+        const viewLeft = el.scrollLeft + stickyWidth;
+        const viewRight = el.scrollLeft + el.clientWidth;
+        const visible = thLeft < viewRight && thRight > viewLeft;
+        if (visible) {
+          if (firstVisibleIdx === -1) firstVisibleIdx = idx;
+          lastVisibleIdx = idx;
+        }
+      });
+
+      const daysInCurrent = getDaysInMonth(
+        currentDate.getFullYear(),
+        currentDate.getMonth()
+      );
+      const lastIndexOfCurrent = daysInCurrent - 1;
+
+      // If user is viewing near the end of current month, append next month (but don't remove once added)
+      if (lastVisibleIdx >= lastIndexOfCurrent - 3 && !hasAppendedRef.current) {
+        // Save scroll position before state change
+        savedScrollRef.current = el.scrollLeft;
+
+        const nextMonthDate = new Date(
+          currentDate.getFullYear(),
+          currentDate.getMonth() + 1,
+          1
+        );
+        const daysInNext = getDaysInMonth(
+          nextMonthDate.getFullYear(),
+          nextMonthDate.getMonth()
+        );
+        hasAppendedRef.current = true;
+        setNextMonthExtraDays(daysInNext);
+      }
+
+      // Update header based on what's visible
+      if (lastVisibleIdx >= lastIndexOfCurrent) {
+        const nextMonthDate = new Date(
+          currentDate.getFullYear(),
+          currentDate.getMonth() + 1,
+          1
+        );
+        setVisibleMonthDate(nextMonthDate);
+      } else {
+        setVisibleMonthDate(
+          new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+        );
+      }
+    };
+
+    const onScroll = () => {
+      if (scrollTimeout) window.clearTimeout(scrollTimeout);
+      // Debounce end-of-scroll detection
+      scrollTimeout = window.setTimeout(() => {
+        onScrollEnd();
+      }, 220);
+    };
+
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      el.removeEventListener("scroll", onScroll as any);
+      if (scrollTimeout) window.clearTimeout(scrollTimeout);
+    };
+  }, [calendarRef, currentDate]);
+
+  // Restore scroll position after appending days
+  useEffect(() => {
+    const el = calendarRef.current;
+    if (!el || !hasAppendedRef.current || savedScrollRef.current === 0) return;
+
+    requestAnimationFrame(() => {
+      el.scrollLeft = savedScrollRef.current;
+    });
+  }, [nextMonthExtraDays]);
 
   const statsData = useMemo(() => {
     return filteredTeam.map((emp) => {
@@ -2587,16 +2820,44 @@ const ShiftScheduler = () => {
     });
   }, [calendarData, filteredTeam, hoursConfig]);
 
-  const handlePrevMonth = () =>
-    setCurrentDate(
-      new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1)
+  const handlePrevMonth = () => {
+    setNextMonthExtraDays(0);
+    hasAppendedRef.current = false;
+    const nd = new Date(
+      currentDate.getFullYear(),
+      currentDate.getMonth() - 1,
+      1
     );
-  const handleNextMonth = () =>
-    setCurrentDate(
-      new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1)
-    );
+    setCurrentDate(nd);
+    setVisibleMonthDate(nd);
+  };
 
-  const monthLabel = currentDate.toLocaleDateString("en-GB", {
+  const handleNextMonth = () => {
+    setNextMonthExtraDays(0);
+    hasAppendedRef.current = false;
+    const nd = new Date(
+      currentDate.getFullYear(),
+      currentDate.getMonth() + 1,
+      1
+    );
+    setCurrentDate(nd);
+    setVisibleMonthDate(nd);
+  };
+
+  useEffect(() => {
+    // Keep visibleMonthDate in sync when currentDate is changed programmatically
+    setVisibleMonthDate((prev) => {
+      if (
+        prev.getFullYear() !== currentDate.getFullYear() ||
+        prev.getMonth() !== currentDate.getMonth()
+      ) {
+        return new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+      }
+      return prev;
+    });
+  }, [currentDate]);
+
+  const monthLabel = visibleMonthDate.toLocaleDateString("en-GB", {
     month: "long",
     year: "numeric",
   });
@@ -3151,12 +3412,12 @@ const ShiftScheduler = () => {
               </div>
             </div>
 
-            {/* Language radio group (horizontal scroll if many) */}
-            <div className="flex items-center gap-2 max-w-xs overflow-x-auto">
+            {/* Language radio group */}
+            <div className="flex items-center gap-2">
               <div className="text-xs font-semibold text-gray-600 mr-2">
                 {t.linguas}:
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <label
                   className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border ${
                     langFilter === "All"
@@ -3303,6 +3564,57 @@ const ShiftScheduler = () => {
               <ChevronRight size={16} />
             </button>
           </div>
+
+          {/* Go to Date picker */}
+          <div className="flex items-center gap-2 bg-white border rounded-lg shadow-sm px-3 py-1">
+            <span className="text-xs font-semibold text-gray-600">Focus:</span>
+            <input
+              type="date"
+              value={focusedDate || ""}
+              onChange={(e) => {
+                const val = e.target.value;
+                setFocusedDate(val || null);
+                if (val) {
+                  const [y, m, d] = val.split("-").map(Number);
+                  const targetDate = new Date(y, m - 1, d);
+                  if (
+                    targetDate.getFullYear() !== currentDate.getFullYear() ||
+                    targetDate.getMonth() !== currentDate.getMonth()
+                  ) {
+                    setCurrentDate(new Date(y, m - 1, 1));
+                    setVisibleMonthDate(new Date(y, m - 1, 1));
+                    hasAppendedRef.current = false;
+                    setNextMonthExtraDays(0);
+                  }
+                  // Scroll to the focused day
+                  setTimeout(() => {
+                    const el = calendarRef.current;
+                    if (el) {
+                      const ths = el.querySelectorAll("table thead th");
+                      const dayThs = Array.from(ths).slice(1) as HTMLElement[];
+                      const targetDay = targetDate.getDate();
+                      const targetTh = dayThs[targetDay - 1];
+                      if (targetTh) {
+                        const stickyWidth =
+                          (ths[0] as HTMLElement)?.offsetWidth || 0;
+                        el.scrollLeft = targetTh.offsetLeft - stickyWidth - 50;
+                      }
+                    }
+                  }, 100);
+                }
+              }}
+              className="text-xs border rounded px-2 py-1"
+            />
+            {focusedDate && (
+              <button
+                onClick={() => setFocusedDate(null)}
+                className="text-xs text-gray-500 hover:text-gray-700"
+                title="Clear focus"
+              >
+                ✕
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -3334,7 +3646,10 @@ const ShiftScheduler = () => {
           setHoursConfig={setHoursConfig}
         />
 
-        <div className="flex-1 overflow-auto print:overflow-visible">
+        <div
+          ref={calendarRef}
+          className="flex-1 overflow-auto print:overflow-visible"
+        >
           <div className="hidden print:block mb-4">
             <h1 className="text-2xl font-bold">
               {t.printTitle} - {monthLabel}
@@ -3385,16 +3700,29 @@ const ShiftScheduler = () => {
                 {calendarData.map((day, dIdx) => {
                   const weekStart = dIdx - (dIdx % 7);
                   const isWeekWithShift = weeksWithShifts.has(weekStart);
+                  const isFocused = focusedDate === day.fullDate;
                   return (
                     <th
                       key={day.date}
-                      className={`p-1 border-b border-r min-w-[30px] text-center relative ${
+                      onClick={() =>
+                        setFocusedDate((prev) =>
+                          prev === day.fullDate ? null : day.fullDate
+                        )
+                      }
+                      className={`p-1 border-b min-w-[30px] text-center relative cursor-pointer transition-all ${
                         !isWeekWithShift ? "no-shift-week" : ""
                       } ${
-                        day.isWeekend ? "bg-indigo-50 print:bg-gray-100" : ""
+                        isFocused
+                          ? "bg-yellow-100 border-l-4 border-r-4 border-t-4 border-yellow-500 z-30"
+                          : day.isWeekend
+                          ? "bg-indigo-50 print:bg-gray-100 border-r"
+                          : "border-r"
                       } ${
-                        day.isPtHoliday ? "bg-red-50 print:bg-gray-200" : ""
-                      } print:border-black`}
+                        day.isPtHoliday && !isFocused
+                          ? "bg-red-50 print:bg-gray-200"
+                          : ""
+                      } print:border-black hover:bg-gray-200`}
+                      title="Click to focus this day"
                     >
                       <div className="text-xs font-bold text-gray-700 print:text-black">
                         {day.date}
@@ -3413,6 +3741,7 @@ const ShiftScheduler = () => {
                 // Visual Dimming for Editor if not their row
                 const isMyRow = loggedInUserId === emp.id;
                 const isDimmed = currentUser.role === "editor" && !isMyRow;
+                const isFocusedRow = focusedEmployeeId === emp.id;
 
                 // Get all shifts for this employee for overflow check
                 const empShifts = calendarData.map((day) => day.shifts[emp.id]);
@@ -3424,7 +3753,17 @@ const ShiftScheduler = () => {
                       isDimmed ? "opacity-50 grayscale" : "hover:bg-gray-50"
                     }`}
                   >
-                    <td className="p-2 border-b border-r bg-white sticky left-0 z-10 shadow-sm print:static print:border-black print:shadow-none group">
+                    <td
+                      onClick={() =>
+                        setFocusedEmployeeId(isFocusedRow ? null : emp.id)
+                      }
+                      className={`p-2 border-b bg-white sticky left-0 z-10 shadow-sm print:static print:border-black print:shadow-none group cursor-pointer ${
+                        isFocusedRow
+                          ? "border-l-4 border-t-4 border-b-4 border-yellow-500 bg-yellow-50"
+                          : "border-r"
+                      }`}
+                      title="Click to focus this employee"
+                    >
                       <div className="flex justify-between items-center">
                         <div className="font-bold text-gray-800 print:text-black">
                           {emp.name}
@@ -3461,6 +3800,8 @@ const ShiftScheduler = () => {
                       const shift = day.shifts[emp.id];
                       const weekStart = dIdx - (dIdx % 7);
                       const isWeekWithShift = weeksWithShifts.has(weekStart);
+                      const isFocused = focusedDate === day.fullDate;
+                      const isLastCell = dIdx === calendarData.length - 1;
                       const isRestViolation =
                         dIdx > 0 &&
                         checkRestViolation(
@@ -3475,6 +3816,7 @@ const ShiftScheduler = () => {
                       prevShift = shift as ShiftType;
 
                       const canClick = canWrite && (isManager || isMyRow);
+                      const isBothFocused = isFocusedRow && isFocused;
 
                       return (
                         <td
@@ -3483,8 +3825,19 @@ const ShiftScheduler = () => {
                             handleCellClick(e, emp.id, day.fullDate, emp.name)
                           }
                           className={`
-                            border-b border-r p-0.5 text-center transition print:cursor-default relative
+                            border-b p-0.5 text-center transition print:cursor-default relative
                             ${!isWeekWithShift ? "no-shift-week" : ""}
+                            ${
+                              isBothFocused
+                                ? "bg-yellow-100 border-l-4 border-r-4 border-t-4 border-b-4 border-yellow-500"
+                                : isFocusedRow
+                                ? `bg-yellow-50 border-t-4 border-b-4 border-yellow-500 ${
+                                    isLastCell ? "border-r-4" : ""
+                                  }`
+                                : isFocused
+                                ? "bg-yellow-50 border-l-4 border-r-4 border-yellow-500"
+                                : "border-r"
+                            }
                             ${
                               canClick
                                 ? "cursor-pointer hover:opacity-80"
@@ -3559,7 +3912,7 @@ const ShiftScheduler = () => {
                   {t.analiseDesc}
                 </td>
               </tr>
-              {["M", "T", "N"].map((shiftCode) => (
+              {["M", "T", "N"].map((shiftCode, shiftIdx) => (
                 <tr key={shiftCode} className="bg-gray-50 print:bg-white">
                   <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
                     {t.faltas}:{" "}
@@ -3574,11 +3927,19 @@ const ShiftScheduler = () => {
                     const isLowStaff =
                       day.lowStaff[shiftCode as "M" | "T" | "N"];
                     const hasErr = missing.length > 0 || isLowStaff;
+                    const isFocused = focusedDate === day.fullDate;
+                    const isLastAnalysisRow = shiftIdx === 2;
                     return (
                       <td
                         key={day.date}
-                        className={`border-b border-r p-1 text-center text-[10px] ${
-                          hasErr ? "bg-red-100 print:bg-gray-100" : ""
+                        className={`border-b p-1 text-center text-[10px] ${
+                          isFocused
+                            ? `bg-yellow-50 border-l-4 border-r-4 border-yellow-500 ${
+                                isLastAnalysisRow ? "border-b-4" : ""
+                              }`
+                            : hasErr
+                            ? "bg-red-100 print:bg-gray-100 border-r"
+                            : "border-r"
                         } print:border-black`}
                       >
                         {hasErr ? (
