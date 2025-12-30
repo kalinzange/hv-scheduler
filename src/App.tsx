@@ -786,86 +786,71 @@ const LoginModal = ({
             </div>
           )}
 
-          {!isChangeMode ? (
+          {!isChangeMode && (
             <form onSubmit={handleSubmit} className="space-y-6">
               {targetRole === "editor" && (
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     {t.selectUser}
                   </label>
-                  <div className="relative">
-                    <select
-                      value={selectedUser}
-                      onChange={(e) => setSelectedUser(e.target.value)}
-                      className="w-full p-3 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
-                    >
-                      <option value="">-- Select your name --</option>
-                      {team.map((u: any) => (
-                        <option key={u.id} value={u.id}>
-                          {u.name} ({u.role})
-                        </option>
-                      ))}
-                    </select>
-                    <Users
-                      size={18}
-                      className="absolute left-3 top-3.5 text-gray-400"
-                    />
-                  </div>
+                  <select
+                    value={selectedUser}
+                    onChange={(e) => setSelectedUser(e.target.value)}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
+                    required
+                  >
+                    <option value="">{t.selectUser}</option>
+                    {team.map((u: any) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} - {u.role}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               )}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  {targetRole === "manager" ? t.enterPass : t.password}
+                  {t.password}
                 </label>
-                <div className="relative">
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full p-3 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                    placeholder="••••••••"
-                    autoFocus={targetRole === "manager"}
-                  />
-                  <KeyRound
-                    size={18}
-                    className="absolute left-3 top-3.5 text-gray-400"
-                  />
-                </div>
-                {targetRole !== "manager" && (
-                  <div className="flex justify-between mt-2">
-                    <p className="text-xs text-gray-400 italic">
-                      {t.defaultPassInfo}
-                    </p>
-                    {selectedUser && (
-                      <button
-                        type="button"
-                        onClick={() => setIsChangeMode(true)}
-                        className="text-xs text-indigo-600 hover:underline font-medium"
-                      >
-                        {t.changePass}
-                      </button>
-                    )}
-                  </div>
-                )}
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
+                  placeholder="••••••••"
+                  required
+                />
               </div>
-              <div className="flex gap-3 pt-2">
+              <div className="flex gap-3 pt-4">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="flex-1 py-3 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200"
+                  className="flex-1 py-3 text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition"
                 >
                   {t.cancel}
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-3 text-sm font-bold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 shadow-lg"
+                  className="flex-1 py-3 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition flex items-center justify-center gap-2"
                 >
+                  <Lock size={16} />
                   {t.login}
                 </button>
               </div>
+              {targetRole === "editor" && (
+                <button
+                  type="button"
+                  onClick={() => setIsChangeMode(true)}
+                  className="w-full text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+                >
+                  {t.changePass}
+                </button>
+              )}
             </form>
-          ) : (
-            <form onSubmit={handleChangePassword} className="space-y-4">
+          )}
+
+          {isChangeMode && (
+            <form onSubmit={handleChangePassword} className="space-y-6">
               <div className="p-3 bg-blue-50 text-blue-700 text-xs rounded mb-4">
                 Updating password for:{" "}
                 <strong>
@@ -1218,6 +1203,7 @@ const AnnualViewModal = ({
     </div>
   );
 };
+
 const StatsModal = ({ isOpen, onClose, data, t, hoursConfig }: any) => {
   if (!isOpen) return null;
   return (
@@ -1309,6 +1295,7 @@ const StatsModal = ({ isOpen, onClose, data, t, hoursConfig }: any) => {
     </div>
   );
 };
+
 const CellEditor = ({
   cell,
   onClose,
@@ -1392,6 +1379,7 @@ const CellEditor = ({
     </div>
   );
 };
+
 const ConfigPanel = ({
   show,
   config,
@@ -3962,6 +3950,199 @@ const ShiftScheduler = () => {
                             <CheckCircle size={12} />
                           </div>
                         )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+
+              {/* Additional Coverage Analysis Rows */}
+              <tr className="bg-gray-50 print:bg-white">
+                <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
+                  Counts
+                </td>
+                {calendarData.map((day) => {
+                  const isFocused = focusedDate === day.fullDate;
+                  const c = day.counts;
+                  return (
+                    <td
+                      key={day.date}
+                      className={`border-b border-r p-1 text-center text-[10px] ${
+                        isFocused
+                          ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
+                          : ""
+                      } print:border-black`}
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        <span
+                          className="px-1.5 py-0.5 rounded border text-[10px] font-semibold"
+                          style={getShiftStyle("M")}
+                          title="Morning count"
+                        >
+                          M: {c.M}
+                        </span>
+                        <span
+                          className="px-1.5 py-0.5 rounded border text-[10px] font-semibold"
+                          style={getShiftStyle("T")}
+                          title="Afternoon count"
+                        >
+                          T: {c.T}
+                        </span>
+                        <span
+                          className="px-1.5 py-0.5 rounded border text-[10px] font-semibold"
+                          style={getShiftStyle("N")}
+                          title="Night count"
+                        >
+                          N: {c.N}
+                        </span>
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+              <tr className="bg-gray-50 print:bg-white">
+                <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
+                  On Duty
+                </td>
+                {calendarData.map((day) => {
+                  const isFocused = focusedDate === day.fullDate;
+                  const total = day.counts.M + day.counts.T + day.counts.N;
+                  return (
+                    <td
+                      key={day.date}
+                      className={`border-b border-r p-1 text-center text-[10px] ${
+                        isFocused
+                          ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
+                          : ""
+                      } print:border-black`}
+                    >
+                      {total}
+                    </td>
+                  );
+                })}
+              </tr>
+              <tr className="bg-gray-50 print:bg-white">
+                <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
+                  Hours
+                </td>
+                {calendarData.map((day) => {
+                  const isFocused = focusedDate === day.fullDate;
+                  const hours =
+                    day.counts.M * hoursConfig.M +
+                    day.counts.T * hoursConfig.T +
+                    day.counts.N * hoursConfig.N;
+                  return (
+                    <td
+                      key={day.date}
+                      className={`border-b border-r p-1 text-center text-[10px] ${
+                        isFocused
+                          ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
+                          : ""
+                      } print:border-black`}
+                    >
+                      {hours}
+                    </td>
+                  );
+                })}
+              </tr>
+              <tr className="bg-gray-50 print:bg-white">
+                <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
+                  Requests
+                </td>
+                {calendarData.map((day) => {
+                  const isFocused = focusedDate === day.fullDate;
+                  const pendingCount = Object.values(
+                    day.pendingReqs || {}
+                  ).filter(Boolean).length;
+                  return (
+                    <td
+                      key={day.date}
+                      className={`border-b border-r p-1 text-center text-[10px] ${
+                        isFocused
+                          ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
+                          : ""
+                      } print:border-black`}
+                    >
+                      {pendingCount}
+                    </td>
+                  );
+                })}
+              </tr>
+              {ALL_LANGUAGES.map((lng) => (
+                <tr key={`lng-${lng}`} className="bg-gray-50 print:bg-white">
+                  <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
+                    {lng} Overflow
+                  </td>
+                  {calendarData.map((day) => {
+                    const isFocused = focusedDate === day.fullDate;
+                    const countM = filteredTeam.reduce((acc, emp) => {
+                      return (
+                        acc +
+                        (day.shifts[emp.id] === "M" &&
+                        emp.languages.includes(lng)
+                          ? 1
+                          : 0)
+                      );
+                    }, 0);
+                    const countT = filteredTeam.reduce((acc, emp) => {
+                      return (
+                        acc +
+                        (day.shifts[emp.id] === "T" &&
+                        emp.languages.includes(lng)
+                          ? 1
+                          : 0)
+                      );
+                    }, 0);
+                    const countN = filteredTeam.reduce((acc, emp) => {
+                      return (
+                        acc +
+                        (day.shifts[emp.id] === "N" &&
+                        emp.languages.includes(lng)
+                          ? 1
+                          : 0)
+                      );
+                    }, 0);
+
+                    const ovM = Math.max(0, countM - 1);
+                    const ovT = Math.max(0, countT - 1);
+                    const ovN = Math.max(0, countN - 1);
+
+                    return (
+                      <td
+                        key={day.date}
+                        className={`border-b border-r p-1 text-center text-[10px] ${
+                          isFocused
+                            ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
+                            : ""
+                        } print:border-black`}
+                        title={`M:${countM} T:${countT} N:${countN}`}
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          <span
+                            className={`px-1.5 py-0.5 rounded border text-[10px] font-semibold ${
+                              ovM > 0 ? "" : "opacity-60"
+                            }`}
+                            style={getShiftStyle("M")}
+                          >
+                            M:+{ovM}
+                          </span>
+                          <span
+                            className={`px-1.5 py-0.5 rounded border text-[10px] font-semibold ${
+                              ovT > 0 ? "" : "opacity-60"
+                            }`}
+                            style={getShiftStyle("T")}
+                          >
+                            T:+{ovT}
+                          </span>
+                          <span
+                            className={`px-1.5 py-0.5 rounded border text-[10px] font-semibold ${
+                              ovN > 0 ? "" : "opacity-60"
+                            }`}
+                            style={getShiftStyle("N")}
+                          >
+                            N:+{ovN}
+                          </span>
+                        </div>
                       </td>
                     );
                   })}

@@ -5,10 +5,10 @@
   "type": "module",
   "homepage": "http://localhost:5173/gcc-scheduler",
   "scripts": {
-    "dev": "node -r dotenv/config ./node_modules/.bin/vite",
-    "build": "tsc && node -r dotenv/config ./node_modules/.bin/vite build",
+    "dev": "vite",
+    "build": "tsc && vite build",
     "lint": "eslint .",
-    "preview": "node -r dotenv/config ./node_modules/.bin/vite preview"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.18",
