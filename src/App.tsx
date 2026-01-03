@@ -5,7 +5,6 @@ import {
   Calendar,
   AlertTriangle,
   CheckCircle,
-  Users,
   Settings,
   Download,
   Printer,
@@ -28,7 +27,6 @@ import {
   Lock,
   Eye,
   Edit3,
-  KeyRound,
   UserCheck,
   Inbox,
   Check,
@@ -40,6 +38,8 @@ import {
   Cloud,
   CloudOff,
   Loader2,
+  Undo,
+  Redo,
 } from "lucide-react";
 
 // --- FIREBASE IMPORTS ---
@@ -246,6 +246,12 @@ const TRANSLATIONS = {
     saved: "Saved to Cloud",
     offline: "Offline",
     loading: "Loading Data...",
+    undo: "Undo",
+    redo: "Redo",
+    selectMultiple: "Hold Ctrl or Shift to select multiple dates",
+    clearSelection: "Clear Selection",
+    selectedDays: "Selected Days",
+    applyToSelection: "Apply to Selection",
   },
 };
 
@@ -484,61 +490,6 @@ const getDateKey = (date: Date): string => {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
-};
-
-const generatePattern = (config: RotationConfig): ShiftType[] => {
-  const { morningDays, afternoonDays, nightDays, nightOffs } = config;
-  const realNightOffs = nightOffs;
-
-  const morningSeq = Array(morningDays).fill("M");
-  const morningOffSeq = Array(morningDays < 5 ? 1 : 2).fill("F");
-  const afternoonSeq = Array(afternoonDays).fill("T");
-  const afternoonOffSeq = Array(afternoonDays < 5 ? 1 : 2).fill("F");
-  const nightSeq = Array(nightDays).fill("N");
-
-  const isAlternating = nightOffs === 3;
-
-  if (isAlternating) {
-    const cycleA = [
-      ...morningSeq,
-      ...morningOffSeq,
-      ...afternoonSeq,
-      ...afternoonOffSeq,
-      ...nightSeq,
-      ...Array(2).fill("F"),
-    ];
-    const cycleB = [
-      ...morningSeq,
-      ...morningOffSeq,
-      ...afternoonSeq,
-      ...afternoonOffSeq,
-      ...nightSeq,
-      ...Array(3).fill("F"),
-    ];
-    return [...cycleA, ...cycleB] as ShiftType[];
-  } else {
-    return [
-      ...morningSeq,
-      ...morningOffSeq,
-      ...afternoonSeq,
-      ...afternoonOffSeq,
-      ...nightSeq,
-      ...Array(realNightOffs).fill("F"),
-    ] as ShiftType[];
-  }
-};
-
-const getShiftForDate = (
-  date: Date,
-  offset: number,
-  pattern: ShiftType[],
-  startDate: Date
-): ShiftType => {
-  const diffTime = date.getTime() - startDate.getTime();
-  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-  if (diffDays < 0) return "F";
-  const position = (diffDays + offset) % pattern.length;
-  return pattern[position];
 };
 
 const getDaysInMonth = (year: number, month: number) => {
@@ -1101,8 +1052,6 @@ const AnnualViewModal = ({
   isOpen,
   onClose,
   team,
-  config,
-  startDate,
   overrides,
   colors,
   t,
@@ -1111,7 +1060,6 @@ const AnnualViewModal = ({
   const [year, setYear] = useState(2026);
   if (!isOpen) return null;
   const emp = team.find((e: any) => e.id === +selectedEmpId);
-  const rotationPattern = generatePattern(config);
   const renderMonth = (mIdx: number) => {
     const daysInM = new Date(year, mIdx + 1, 0).getDate();
     const days = [];
@@ -1119,19 +1067,8 @@ const AnnualViewModal = ({
       const date = new Date(year, mIdx, d);
       const dateStr = getDateKey(date); // FIXED
       const isOverride = overrides[`${emp.id}_${dateStr}`];
-      let shift =
-        isOverride ||
-        getShiftForDate(date, emp.offset, rotationPattern, startDate);
-      if (
-        !isOverride &&
-        emp.rotationMode &&
-        emp.rotationMode !== "STANDARD" &&
-        shift !== "F"
-      ) {
-        if (emp.rotationMode === "FIXED_M") shift = "M";
-        if (emp.rotationMode === "FIXED_T") shift = "T";
-        if (emp.rotationMode === "FIXED_N") shift = "N";
-      }
+      // Default to day off unless manually overridden
+      let shift = isOverride || "F";
       days.push(
         <div
           key={d}
@@ -1343,40 +1280,42 @@ const CellEditor = ({
   const bottomPosition = window.innerHeight - cell.y + 40;
 
   return (
-    <div
-      className="absolute z-50 bg-white rounded-lg shadow-xl border p-2 w-48 flex flex-col gap-1 animate-in fade-in zoom-in duration-200"
-      style={{
-        // Se estiver perto do fundo, usa 'bottom' para posicionar para cima
-        // Se não, usa 'top' para posicionar para baixo (comportamento normal)
-        top: isNearBottom ? undefined : cell.y + 10,
-        bottom: isNearBottom ? bottomPosition : undefined,
-        left: Math.min(cell.x, window.innerWidth - 200),
-      }}
-    >
-      <div className="text-xs font-bold text-gray-500 mb-1 px-1 border-b pb-1">
-        Edit: {cell.empName} <br /> {cell.date}
+    <>
+      <div className="fixed inset-0 z-40" onClick={onClose}></div>
+      <div
+        className="absolute z-50 bg-white rounded-lg shadow-xl border p-2 w-48 flex flex-col gap-1 animate-in fade-in zoom-in duration-200"
+        style={{
+          // Se estiver perto do fundo, usa 'bottom' para posicionar para cima
+          // Se não, usa 'top' para posicionar para baixo (comportamento normal)
+          top: isNearBottom ? undefined : cell.y + 10,
+          bottom: isNearBottom ? bottomPosition : undefined,
+          left: Math.min(cell.x, window.innerWidth - 200),
+        }}
+      >
+        <div className="text-xs font-bold text-gray-500 mb-1 px-1 border-b pb-1">
+          Edit: {cell.empName} <br /> {cell.date}
+        </div>
+        {options.map((opt) => (
+          <button
+            key={opt.id}
+            onClick={() => {
+              onUpdate(cell.key, opt.id === "CLEAR" ? undefined : opt.id);
+              onClose();
+            }}
+            className="flex items-center gap-2 p-2 text-xs rounded hover:bg-gray-100 text-left border transition-colors"
+            style={{ borderLeftColor: opt.color, borderLeftWidth: 4 }}
+          >
+            {opt.icon || (
+              <div
+                className="w-3 h-3 rounded-full"
+                style={{ backgroundColor: opt.color }}
+              ></div>
+            )}{" "}
+            {opt.label}
+          </button>
+        ))}
       </div>
-      {options.map((opt) => (
-        <button
-          key={opt.id}
-          onClick={() => {
-            onUpdate(cell.key, opt.id === "CLEAR" ? undefined : opt.id);
-            onClose();
-          }}
-          className="flex items-center gap-2 p-2 text-xs rounded hover:bg-gray-100 text-left border transition-colors"
-          style={{ borderLeftColor: opt.color, borderLeftWidth: 4 }}
-        >
-          {opt.icon || (
-            <div
-              className="w-3 h-3 rounded-full"
-              style={{ backgroundColor: opt.color }}
-            ></div>
-          )}{" "}
-          {opt.label}
-        </button>
-      ))}
-      <div className="fixed inset-0 -z-10" onClick={onClose}></div>
-    </div>
+    </>
   );
 };
 
@@ -1919,7 +1858,7 @@ const ShiftScheduler = () => {
   const [roleFilter, setRoleFilter] = useState("All");
   const [langFilter, setLangFilter] = useState("All");
   const [shiftFilter, setShiftFilter] = useState("All");
-  const [sortOrder, setSortOrder] = useState("OFFSET");
+  const [sortOrder, setSortOrder] = useState("AZ");
   const [focusedDate, setFocusedDate] = useState<string | null>(null);
   const [focusedEmployeeId, setFocusedEmployeeId] = useState<number | null>(
     null
@@ -1957,6 +1896,14 @@ const ShiftScheduler = () => {
     S: "#e5e7eb",
   });
   const [overrides, setOverrides] = useState<Record<string, OverrideType>>({});
+  const [undoHistory, setUndoHistory] = useState<
+    Record<string, OverrideType>[]
+  >([]);
+  const [redoHistory, setRedoHistory] = useState<
+    Record<string, OverrideType>[]
+  >([]);
+  const [selectedDates, setSelectedDates] = useState<string[]>([]);
+  const [lastSelectedDate, setLastSelectedDate] = useState<string | null>(null);
 
   // Track if manager has made changes since last publish
   useEffect(() => {
@@ -2290,8 +2237,6 @@ const ShiftScheduler = () => {
   };
 
   const t = TRANSLATIONS[lang];
-  const startDate = useMemo(() => new Date(startDateStr), [startDateStr]);
-  const rotationPattern = useMemo(() => generatePattern(config), [config]);
 
   // Use publishedOverrides for non-managers, draftOverrides for managers
   const effectiveOverrides = isManager ? overrides : publishedOverrides;
@@ -2304,10 +2249,17 @@ const ShiftScheduler = () => {
 
       let shiftMatch = true;
       if (shiftFilter !== "All") {
-        // Get the current shift for this employee
-        const dateKey = `${emp.id}_${startDateStr}`;
-        const currentShift = effectiveOverrides[dateKey] || rotationPattern[0];
-        shiftMatch = currentShift === shiftFilter;
+        // Check if employee has the filtered shift on any selected date
+        if (selectedDates.length > 0) {
+          shiftMatch = selectedDates.some((date) => {
+            const dateKey = `${emp.id}_${date}`;
+            const shift = effectiveOverrides[dateKey] || "F";
+            return shift === shiftFilter;
+          });
+        } else {
+          // If no dates selected, show all
+          shiftMatch = true;
+        }
       }
 
       return roleMatch && langMatch && shiftMatch;
@@ -2336,7 +2288,7 @@ const ShiftScheduler = () => {
     sortOrder,
     startDateStr,
     effectiveOverrides,
-    rotationPattern,
+    selectedDates,
   ]);
 
   const handleCellClick = (
@@ -2345,11 +2297,6 @@ const ShiftScheduler = () => {
     dateStr: string,
     empName: string
   ) => {
-    if (!canWrite) return;
-    if (currentUser.role === "editor" && empId !== loggedInUserId) {
-      alert(t.cantEditOthers);
-      return;
-    }
     const rect = (e.target as HTMLElement).getBoundingClientRect();
     setEditingCell({
       key: `${empId}_${dateStr}`,
@@ -2363,6 +2310,8 @@ const ShiftScheduler = () => {
   const handleOverride = (key: string, value: OverrideType | undefined) => {
     if (!canWrite) return;
     if (isManager) {
+      setUndoHistory((prev) => [...prev, { ...overrides }]);
+      setRedoHistory([]);
       setOverrides((prev) => {
         const next = { ...prev };
         if (value) next[key] = value;
@@ -2388,6 +2337,22 @@ const ShiftScheduler = () => {
     alert(t.requestSent);
   };
 
+  const handleUndo = () => {
+    if (undoHistory.length === 0) return;
+    const previous = undoHistory[undoHistory.length - 1];
+    setRedoHistory((prev) => [...prev, { ...overrides }]);
+    setOverrides(previous);
+    setUndoHistory((prev) => prev.slice(0, -1));
+  };
+
+  const handleRedo = () => {
+    if (redoHistory.length === 0) return;
+    const next = redoHistory[redoHistory.length - 1];
+    setUndoHistory((prev) => [...prev, { ...overrides }]);
+    setOverrides(next);
+    setRedoHistory((prev) => prev.slice(0, -1));
+  };
+
   const handleBulkApply = (
     targetId: string | number,
     start: string,
@@ -2395,6 +2360,8 @@ const ShiftScheduler = () => {
     type: OverrideType | undefined
   ) => {
     if (!canWrite) return;
+    setUndoHistory((prev) => [...prev, { ...overrides }]);
+    setRedoHistory([]);
     const applyToEmp = (empId: number) => {
       const s = new Date(start);
       const e = new Date(end);
@@ -2470,26 +2437,11 @@ const ShiftScheduler = () => {
         );
         pendingReqs[emp.id] = hasPending;
 
+        // Default to day off unless manually overridden
         if (effectiveOverrides[overrideKey]) {
           shift = effectiveOverrides[overrideKey];
         } else {
-          shift = getShiftForDate(
-            dateObj,
-            emp.offset,
-            rotationPattern,
-            startDate
-          );
-        }
-
-        if (
-          !effectiveOverrides[overrideKey] &&
-          emp.rotationMode &&
-          emp.rotationMode !== "STANDARD" &&
-          shift !== "F"
-        ) {
-          if (emp.rotationMode === "FIXED_M") shift = "M";
-          if (emp.rotationMode === "FIXED_T") shift = "T";
-          if (emp.rotationMode === "FIXED_N") shift = "N";
+          shift = "F"; // Default to day off - manual scheduling only
         }
         shifts[emp.id] = shift;
         if (["M", "T", "N"].includes(shift)) {
@@ -2565,26 +2517,11 @@ const ShiftScheduler = () => {
           );
           pendingReqs[emp.id] = hasPending;
 
+          // Default to day off unless manually overridden
           if (effectiveOverrides[overrideKey]) {
             shift = effectiveOverrides[overrideKey];
           } else {
-            shift = getShiftForDate(
-              dateObj,
-              emp.offset,
-              rotationPattern,
-              startDate
-            );
-          }
-
-          if (
-            !effectiveOverrides[overrideKey] &&
-            emp.rotationMode &&
-            emp.rotationMode !== "STANDARD" &&
-            shift !== "F"
-          ) {
-            if (emp.rotationMode === "FIXED_M") shift = "M";
-            if (emp.rotationMode === "FIXED_T") shift = "T";
-            if (emp.rotationMode === "FIXED_N") shift = "N";
+            shift = "F"; // Default to day off - manual scheduling only
           }
           shifts[emp.id] = shift;
           if (["M", "T", "N"].includes(shift)) {
@@ -2633,8 +2570,6 @@ const ShiftScheduler = () => {
   }, [
     currentDate,
     teamState,
-    rotationPattern,
-    startDate,
     holidays,
     minStaff,
     requiredLangs,
@@ -2672,7 +2607,7 @@ const ShiftScheduler = () => {
 
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll as any);
-  }, [calendarRef, currentDate, teamState, rotationPattern, startDate]);
+  }, [calendarRef, currentDate, teamState]);
 
   // Auto-detect visible month and append next-month days when user stops scrolling
   useEffect(() => {
@@ -3178,9 +3113,6 @@ const ShiftScheduler = () => {
         isOpen={showAnnual}
         onClose={() => setShowAnnual(false)}
         team={teamState}
-        config={config}
-        startDate={startDate}
-        holidays={holidays}
         overrides={overrides}
         colors={colors}
         t={t}
@@ -3202,6 +3134,10 @@ const ShiftScheduler = () => {
                 {config.morningDays < 5 ? 1 : 2}F-{config.afternoonDays}T-
                 {config.afternoonDays < 5 ? 1 : 2}F-{config.nightDays}N-
                 {config.nightOffs === 3 ? "2/3" : config.nightOffs}F
+              </span>
+              <span className="text-gray-300">|</span>
+              <span className="text-blue-600 italic">
+                💡 {t.selectMultiple}
               </span>
             </div>
           </div>
@@ -3323,6 +3259,30 @@ const ShiftScheduler = () => {
                   <span className="ml-1 font-bold">*</span>
                 )}
               </button>
+            )}
+
+            {/* Undo/Redo Buttons */}
+            {isManager && (
+              <>
+                <button
+                  onClick={handleUndo}
+                  disabled={undoHistory.length === 0}
+                  className="flex items-center px-3 py-2 bg-gray-50 text-gray-700 rounded hover:bg-gray-100 transition border border-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                  title={t.undo}
+                >
+                  <Undo size={16} className="mr-2" />
+                  {t.undo}
+                </button>
+                <button
+                  onClick={handleRedo}
+                  disabled={redoHistory.length === 0}
+                  className="flex items-center px-3 py-2 bg-gray-50 text-gray-700 rounded hover:bg-gray-100 transition border border-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                  title={t.redo}
+                >
+                  <Redo size={16} className="mr-2" />
+                  {t.redo}
+                </button>
+              </>
             )}
 
             {canAccessSettings ? (
@@ -3553,6 +3513,21 @@ const ShiftScheduler = () => {
             </button>
           </div>
 
+          {/* Multi-day selection indicator */}
+          {selectedDates.length > 0 && (
+            <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg shadow-sm px-3 py-1">
+              <span className="text-xs font-semibold text-blue-800">
+                {t.selectedDays}: {selectedDates.length}
+              </span>
+              <button
+                onClick={() => setSelectedDates([])}
+                className="text-xs text-blue-600 hover:text-blue-800 underline"
+              >
+                {t.clearSelection}
+              </button>
+            </div>
+          )}
+
           {/* Go to Date picker */}
           <div className="flex items-center gap-2 bg-white border rounded-lg shadow-sm px-3 py-1">
             <span className="text-xs font-semibold text-gray-600">Focus:</span>
@@ -3689,28 +3664,72 @@ const ShiftScheduler = () => {
                   const weekStart = dIdx - (dIdx % 7);
                   const isWeekWithShift = weeksWithShifts.has(weekStart);
                   const isFocused = focusedDate === day.fullDate;
+                  const isSelected = selectedDates.includes(day.fullDate);
                   return (
                     <th
                       key={day.date}
-                      onClick={() =>
-                        setFocusedDate((prev) =>
-                          prev === day.fullDate ? null : day.fullDate
-                        )
-                      }
+                      onClick={(e) => {
+                        if (e.shiftKey && lastSelectedDate) {
+                          // Range selection with Shift
+                          e.preventDefault();
+                          const lastIndex = calendarData.findIndex(
+                            (d) => d.fullDate === lastSelectedDate
+                          );
+                          const currentIndex = dIdx;
+                          const startIdx = Math.min(lastIndex, currentIndex);
+                          const endIdx = Math.max(lastIndex, currentIndex);
+                          const rangeSelection = calendarData
+                            .slice(startIdx, endIdx + 1)
+                            .map((d) => d.fullDate);
+                          setSelectedDates((prev) => {
+                            // Merge with existing selection
+                            const newSet = new Set([
+                              ...prev,
+                              ...rangeSelection,
+                            ]);
+                            return Array.from(newSet);
+                          });
+                          setLastSelectedDate(day.fullDate);
+                        } else if (e.ctrlKey || e.metaKey) {
+                          // Toggle single selection with Ctrl
+                          e.preventDefault();
+                          setSelectedDates((prev) => {
+                            const isCurrentlySelected = prev.includes(
+                              day.fullDate
+                            );
+                            const newSelection = isCurrentlySelected
+                              ? prev.filter((d) => d !== day.fullDate)
+                              : [...prev, day.fullDate];
+                            return newSelection;
+                          });
+                          setLastSelectedDate(day.fullDate);
+                        } else {
+                          // Single click - select this day and set as anchor
+                          setSelectedDates([day.fullDate]);
+                          setLastSelectedDate(day.fullDate);
+                          setFocusedDate(null);
+                        }
+                      }}
                       className={`p-1 border-b min-w-[30px] text-center relative cursor-pointer transition-all ${
                         !isWeekWithShift ? "no-shift-week" : ""
                       } ${
-                        isFocused
+                        isSelected
+                          ? "bg-blue-200 border-l-4 border-r-4 border-t-4 border-blue-500 z-30"
+                          : isFocused
                           ? "bg-yellow-100 border-l-4 border-r-4 border-t-4 border-yellow-500 z-30"
                           : day.isWeekend
                           ? "bg-indigo-50 print:bg-gray-100 border-r"
                           : "border-r"
                       } ${
-                        day.isPtHoliday && !isFocused
+                        day.isPtHoliday && !isFocused && !isSelected
                           ? "bg-red-50 print:bg-gray-200"
                           : ""
                       } print:border-black hover:bg-gray-200`}
-                      title="Click to focus this day"
+                      title={
+                        isSelected
+                          ? "Selected - Shift+Click to extend, Ctrl+Click to deselect"
+                          : "Click to focus, Ctrl+Click to add, Shift+Click for range"
+                      }
                     >
                       <div className="text-xs font-bold text-gray-700 print:text-black">
                         {day.date}
@@ -3803,8 +3822,8 @@ const ShiftScheduler = () => {
                       const isPending = day.pendingReqs[emp.id]; // Check for pending
                       prevShift = shift as ShiftType;
 
-                      const canClick = canWrite && (isManager || isMyRow);
                       const isBothFocused = isFocusedRow && isFocused;
+                      const isSelected = selectedDates.includes(day.fullDate);
 
                       return (
                         <td
@@ -3816,7 +3835,9 @@ const ShiftScheduler = () => {
                             border-b p-0.5 text-center transition print:cursor-default relative
                             ${!isWeekWithShift ? "no-shift-week" : ""}
                             ${
-                              isBothFocused
+                              isSelected
+                                ? "bg-blue-100 border-l-4 border-r-4 border-blue-500"
+                                : isBothFocused
                                 ? "bg-yellow-100 border-l-4 border-r-4 border-t-4 border-b-4 border-yellow-500"
                                 : isFocusedRow
                                 ? `bg-yellow-50 border-t-4 border-b-4 border-yellow-500 ${
@@ -3826,16 +3847,21 @@ const ShiftScheduler = () => {
                                 ? "bg-yellow-50 border-l-4 border-r-4 border-yellow-500"
                                 : "border-r"
                             }
-                            ${
-                              canClick
-                                ? "cursor-pointer hover:opacity-80"
-                                : "cursor-not-allowed"
-                            }
+                            cursor-pointer hover:opacity-80
                           `}
                         >
                           <div
+                            onClick={(e) => {
+                              alert("DIV CLICKED!");
+                              handleCellClick(
+                                e,
+                                emp.id,
+                                day.fullDate,
+                                emp.name
+                              );
+                            }}
                             className={`
-                              w-full h-8 rounded flex items-center justify-center text-xs font-bold shadow-sm print:shadow-none print:rounded-none border 
+                              w-full h-8 rounded flex items-center justify-center text-xs font-bold shadow-sm print:shadow-none print:rounded-none border
                               ${
                                 shiftOverflowInfo.hasShiftOverflow
                                   ? "ring-2 ring-red-500 z-10"
@@ -3888,266 +3914,278 @@ const ShiftScheduler = () => {
                   </tr>
                 );
               })}
-              {/* Analysis Rows (Only visible to manager or full desktop) - NOW VISIBLE IN PRINT */}
-              <tr className="bg-gray-800 text-white font-bold print:bg-gray-200 print:text-black print:border-t-2 print:border-black">
-                <td className="p-2 border-r sticky left-0 bg-gray-800 z-10 shadow-sm print:static print:bg-transparent">
-                  {t.analise}
-                </td>
-                <td
-                  colSpan={calendarData.length}
-                  className="p-2 text-xs font-normal"
-                >
-                  {t.analiseDesc}
-                </td>
-              </tr>
-              {["M", "T", "N"].map((shiftCode, shiftIdx) => (
-                <tr key={shiftCode} className="bg-gray-50 print:bg-white">
-                  <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
-                    {t.faltas}:{" "}
-                    {shiftCode === "M"
-                      ? t.manha
-                      : shiftCode === "T"
-                      ? t.tarde
-                      : t.noite}
-                  </td>
-                  {calendarData.map((day) => {
-                    const missing = day.missing[shiftCode as "M" | "T" | "N"];
-                    const isLowStaff =
-                      day.lowStaff[shiftCode as "M" | "T" | "N"];
-                    const hasErr = missing.length > 0 || isLowStaff;
-                    const isFocused = focusedDate === day.fullDate;
-                    const isLastAnalysisRow = shiftIdx === 2;
-                    return (
-                      <td
-                        key={day.date}
-                        className={`border-b p-1 text-center text-[10px] ${
-                          isFocused
-                            ? `bg-yellow-50 border-l-4 border-r-4 border-yellow-500 ${
-                                isLastAnalysisRow ? "border-b-4" : ""
-                              }`
-                            : hasErr
-                            ? "bg-red-100 print:bg-gray-100 border-r"
-                            : "border-r"
-                        } print:border-black`}
-                      >
-                        {hasErr ? (
-                          <div className="text-red-600 font-bold flex flex-col items-center justify-center h-full group relative cursor-help print:text-black">
-                            <AlertTriangle
-                              size={12}
-                              className="mb-1 print:text-black"
-                            />
-                            <span className="print:text-[8px]">
-                              {missing.join(",")}
-                            </span>
-                            {isLowStaff && (
-                              <span className="text-[8px] whitespace-nowrap">
-                                {t.lowStaff}
-                              </span>
+              {/* Coverage Analysis - Issues Section (Visible to Escalator and Manager only) */}
+              {canWrite && (
+                <>
+                  <tr className="bg-gray-800 text-white font-bold print:bg-gray-200 print:text-black print:border-t-2 print:border-black">
+                    <td className="p-2 border-r sticky left-0 bg-gray-800 z-10 shadow-sm print:static print:bg-transparent">
+                      {t.analise}
+                    </td>
+                    <td
+                      colSpan={calendarData.length}
+                      className="p-2 text-xs font-normal"
+                    >
+                      {t.analiseDesc}
+                    </td>
+                  </tr>
+                  {["M", "T", "N"].map((shiftCode, shiftIdx) => (
+                    <tr key={shiftCode} className="bg-gray-50 print:bg-white">
+                      <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
+                        {t.faltas}:{" "}
+                        {shiftCode === "M"
+                          ? t.manha
+                          : shiftCode === "T"
+                          ? t.tarde
+                          : t.noite}
+                      </td>
+                      {calendarData.map((day) => {
+                        const missing =
+                          day.missing[shiftCode as "M" | "T" | "N"];
+                        const isLowStaff =
+                          day.lowStaff[shiftCode as "M" | "T" | "N"];
+                        const hasErr = missing.length > 0 || isLowStaff;
+                        const isFocused = focusedDate === day.fullDate;
+                        const isLastAnalysisRow = shiftIdx === 2;
+                        return (
+                          <td
+                            key={day.date}
+                            className={`border-b p-1 text-center text-[10px] ${
+                              isFocused
+                                ? `bg-yellow-50 border-l-4 border-r-4 border-yellow-500 ${
+                                    isLastAnalysisRow ? "border-b-4" : ""
+                                  }`
+                                : hasErr
+                                ? "bg-red-100 print:bg-gray-100 border-r"
+                                : "border-r"
+                            } print:border-black`}
+                          >
+                            {hasErr ? (
+                              <div className="text-red-600 font-bold flex flex-col items-center justify-center h-full group relative cursor-help print:text-black">
+                                <AlertTriangle
+                                  size={12}
+                                  className="mb-1 print:text-black"
+                                />
+                                <span className="print:text-[8px]">
+                                  {missing.join(",")}
+                                </span>
+                                {isLowStaff && (
+                                  <span className="text-[8px] whitespace-nowrap">
+                                    {t.lowStaff}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-green-300 print:text-gray-300">
+                                <CheckCircle size={12} />
+                              </div>
                             )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </>
+              )}
+
+              {/* Complete Coverage Analysis - Manager Only */}
+              {isManager && (
+                <>
+                  <tr className="bg-gray-50 print:bg-white">
+                    <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
+                      Counts
+                    </td>
+                    {calendarData.map((day) => {
+                      const isFocused = focusedDate === day.fullDate;
+                      const c = day.counts;
+                      return (
+                        <td
+                          key={day.date}
+                          className={`border-b border-r p-1 text-center text-[10px] ${
+                            isFocused
+                              ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
+                              : ""
+                          } print:border-black`}
+                        >
+                          <div className="flex items-center justify-center gap-1">
+                            <span
+                              className="px-1.5 py-0.5 rounded border text-[10px] font-semibold"
+                              style={getShiftStyle("M")}
+                              title="Morning count"
+                            >
+                              M: {c.M}
+                            </span>
+                            <span
+                              className="px-1.5 py-0.5 rounded border text-[10px] font-semibold"
+                              style={getShiftStyle("T")}
+                              title="Afternoon count"
+                            >
+                              T: {c.T}
+                            </span>
+                            <span
+                              className="px-1.5 py-0.5 rounded border text-[10px] font-semibold"
+                              style={getShiftStyle("N")}
+                              title="Night count"
+                            >
+                              N: {c.N}
+                            </span>
                           </div>
-                        ) : (
-                          <div className="text-green-300 print:text-gray-300">
-                            <CheckCircle size={12} />
-                          </div>
-                        )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  <tr className="bg-gray-50 print:bg-white">
+                    <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
+                      On Duty
+                    </td>
+                    {calendarData.map((day) => {
+                      const isFocused = focusedDate === day.fullDate;
+                      const total = day.counts.M + day.counts.T + day.counts.N;
+                      return (
+                        <td
+                          key={day.date}
+                          className={`border-b border-r p-1 text-center text-[10px] ${
+                            isFocused
+                              ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
+                              : ""
+                          } print:border-black`}
+                        >
+                          {total}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  <tr className="bg-gray-50 print:bg-white">
+                    <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
+                      Hours
+                    </td>
+                    {calendarData.map((day) => {
+                      const isFocused = focusedDate === day.fullDate;
+                      const hours =
+                        day.counts.M * hoursConfig.M +
+                        day.counts.T * hoursConfig.T +
+                        day.counts.N * hoursConfig.N;
+                      return (
+                        <td
+                          key={day.date}
+                          className={`border-b border-r p-1 text-center text-[10px] ${
+                            isFocused
+                              ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
+                              : ""
+                          } print:border-black`}
+                        >
+                          {hours}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  <tr className="bg-gray-50 print:bg-white">
+                    <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
+                      Requests
+                    </td>
+                    {calendarData.map((day) => {
+                      const isFocused = focusedDate === day.fullDate;
+                      const pendingCount = Object.values(
+                        day.pendingReqs || {}
+                      ).filter(Boolean).length;
+                      return (
+                        <td
+                          key={day.date}
+                          className={`border-b border-r p-1 text-center text-[10px] ${
+                            isFocused
+                              ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
+                              : ""
+                          } print:border-black`}
+                        >
+                          {pendingCount}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  {ALL_LANGUAGES.map((lng) => (
+                    <tr
+                      key={`lng-${lng}`}
+                      className="bg-gray-50 print:bg-white"
+                    >
+                      <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
+                        {lng} Overflow
                       </td>
-                    );
-                  })}
-                </tr>
-              ))}
+                      {calendarData.map((day) => {
+                        const isFocused = focusedDate === day.fullDate;
+                        const countM = filteredTeam.reduce((acc, emp) => {
+                          return (
+                            acc +
+                            (day.shifts[emp.id] === "M" &&
+                            emp.languages.includes(lng)
+                              ? 1
+                              : 0)
+                          );
+                        }, 0);
+                        const countT = filteredTeam.reduce((acc, emp) => {
+                          return (
+                            acc +
+                            (day.shifts[emp.id] === "T" &&
+                            emp.languages.includes(lng)
+                              ? 1
+                              : 0)
+                          );
+                        }, 0);
+                        const countN = filteredTeam.reduce((acc, emp) => {
+                          return (
+                            acc +
+                            (day.shifts[emp.id] === "N" &&
+                            emp.languages.includes(lng)
+                              ? 1
+                              : 0)
+                          );
+                        }, 0);
 
-              {/* Additional Coverage Analysis Rows */}
-              <tr className="bg-gray-50 print:bg-white">
-                <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
-                  Counts
-                </td>
-                {calendarData.map((day) => {
-                  const isFocused = focusedDate === day.fullDate;
-                  const c = day.counts;
-                  return (
-                    <td
-                      key={day.date}
-                      className={`border-b border-r p-1 text-center text-[10px] ${
-                        isFocused
-                          ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
-                          : ""
-                      } print:border-black`}
-                    >
-                      <div className="flex items-center justify-center gap-1">
-                        <span
-                          className="px-1.5 py-0.5 rounded border text-[10px] font-semibold"
-                          style={getShiftStyle("M")}
-                          title="Morning count"
-                        >
-                          M: {c.M}
-                        </span>
-                        <span
-                          className="px-1.5 py-0.5 rounded border text-[10px] font-semibold"
-                          style={getShiftStyle("T")}
-                          title="Afternoon count"
-                        >
-                          T: {c.T}
-                        </span>
-                        <span
-                          className="px-1.5 py-0.5 rounded border text-[10px] font-semibold"
-                          style={getShiftStyle("N")}
-                          title="Night count"
-                        >
-                          N: {c.N}
-                        </span>
-                      </div>
-                    </td>
-                  );
-                })}
-              </tr>
-              <tr className="bg-gray-50 print:bg-white">
-                <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
-                  On Duty
-                </td>
-                {calendarData.map((day) => {
-                  const isFocused = focusedDate === day.fullDate;
-                  const total = day.counts.M + day.counts.T + day.counts.N;
-                  return (
-                    <td
-                      key={day.date}
-                      className={`border-b border-r p-1 text-center text-[10px] ${
-                        isFocused
-                          ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
-                          : ""
-                      } print:border-black`}
-                    >
-                      {total}
-                    </td>
-                  );
-                })}
-              </tr>
-              <tr className="bg-gray-50 print:bg-white">
-                <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
-                  Hours
-                </td>
-                {calendarData.map((day) => {
-                  const isFocused = focusedDate === day.fullDate;
-                  const hours =
-                    day.counts.M * hoursConfig.M +
-                    day.counts.T * hoursConfig.T +
-                    day.counts.N * hoursConfig.N;
-                  return (
-                    <td
-                      key={day.date}
-                      className={`border-b border-r p-1 text-center text-[10px] ${
-                        isFocused
-                          ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
-                          : ""
-                      } print:border-black`}
-                    >
-                      {hours}
-                    </td>
-                  );
-                })}
-              </tr>
-              <tr className="bg-gray-50 print:bg-white">
-                <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
-                  Requests
-                </td>
-                {calendarData.map((day) => {
-                  const isFocused = focusedDate === day.fullDate;
-                  const pendingCount = Object.values(
-                    day.pendingReqs || {}
-                  ).filter(Boolean).length;
-                  return (
-                    <td
-                      key={day.date}
-                      className={`border-b border-r p-1 text-center text-[10px] ${
-                        isFocused
-                          ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
-                          : ""
-                      } print:border-black`}
-                    >
-                      {pendingCount}
-                    </td>
-                  );
-                })}
-              </tr>
-              {ALL_LANGUAGES.map((lng) => (
-                <tr key={`lng-${lng}`} className="bg-gray-50 print:bg-white">
-                  <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
-                    {lng} Overflow
-                  </td>
-                  {calendarData.map((day) => {
-                    const isFocused = focusedDate === day.fullDate;
-                    const countM = filteredTeam.reduce((acc, emp) => {
-                      return (
-                        acc +
-                        (day.shifts[emp.id] === "M" &&
-                        emp.languages.includes(lng)
-                          ? 1
-                          : 0)
-                      );
-                    }, 0);
-                    const countT = filteredTeam.reduce((acc, emp) => {
-                      return (
-                        acc +
-                        (day.shifts[emp.id] === "T" &&
-                        emp.languages.includes(lng)
-                          ? 1
-                          : 0)
-                      );
-                    }, 0);
-                    const countN = filteredTeam.reduce((acc, emp) => {
-                      return (
-                        acc +
-                        (day.shifts[emp.id] === "N" &&
-                        emp.languages.includes(lng)
-                          ? 1
-                          : 0)
-                      );
-                    }, 0);
+                        const ovM = Math.max(0, countM - 1);
+                        const ovT = Math.max(0, countT - 1);
+                        const ovN = Math.max(0, countN - 1);
 
-                    const ovM = Math.max(0, countM - 1);
-                    const ovT = Math.max(0, countT - 1);
-                    const ovN = Math.max(0, countN - 1);
-
-                    return (
-                      <td
-                        key={day.date}
-                        className={`border-b border-r p-1 text-center text-[10px] ${
-                          isFocused
-                            ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
-                            : ""
-                        } print:border-black`}
-                        title={`M:${countM} T:${countT} N:${countN}`}
-                      >
-                        <div className="flex items-center justify-center gap-1">
-                          <span
-                            className={`px-1.5 py-0.5 rounded border text-[10px] font-semibold ${
-                              ovM > 0 ? "" : "opacity-60"
-                            }`}
-                            style={getShiftStyle("M")}
+                        return (
+                          <td
+                            key={day.date}
+                            className={`border-b border-r p-1 text-center text-[10px] ${
+                              isFocused
+                                ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
+                                : ""
+                            } print:border-black`}
+                            title={`M:${countM} T:${countT} N:${countN}`}
                           >
-                            M:+{ovM}
-                          </span>
-                          <span
-                            className={`px-1.5 py-0.5 rounded border text-[10px] font-semibold ${
-                              ovT > 0 ? "" : "opacity-60"
-                            }`}
-                            style={getShiftStyle("T")}
-                          >
-                            T:+{ovT}
-                          </span>
-                          <span
-                            className={`px-1.5 py-0.5 rounded border text-[10px] font-semibold ${
-                              ovN > 0 ? "" : "opacity-60"
-                            }`}
-                            style={getShiftStyle("N")}
-                          >
-                            N:+{ovN}
-                          </span>
-                        </div>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
+                            <div className="flex items-center justify-center gap-1">
+                              <span
+                                className={`px-1.5 py-0.5 rounded border text-[10px] font-semibold ${
+                                  ovM > 0 ? "" : "opacity-60"
+                                }`}
+                                style={getShiftStyle("M")}
+                              >
+                                M:+{ovM}
+                              </span>
+                              <span
+                                className={`px-1.5 py-0.5 rounded border text-[10px] font-semibold ${
+                                  ovT > 0 ? "" : "opacity-60"
+                                }`}
+                                style={getShiftStyle("T")}
+                              >
+                                T:+{ovT}
+                              </span>
+                              <span
+                                className={`px-1.5 py-0.5 rounded border text-[10px] font-semibold ${
+                                  ovN > 0 ? "" : "opacity-60"
+                                }`}
+                                style={getShiftStyle("N")}
+                              >
+                                N:+{ovN}
+                              </span>
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </>
+              )}
             </tbody>
           </table>
           <div className="hidden print:block mt-8 border-t pt-4">
