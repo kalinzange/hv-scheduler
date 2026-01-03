@@ -2095,6 +2095,9 @@ const ShiftScheduler = () => {
       setLoggedInName("");
       setLoggedInUserId(0);
       setShowConfig(false);
+      // Clear highlights when switching roles
+      setFocusedEmployeeId(null);
+      setSelectedDates([]);
       return;
     }
     setTargetRole(roleKey === "MANAGER" ? "manager" : "editor");
@@ -2106,10 +2109,15 @@ const ShiftScheduler = () => {
     name: string,
     id: number
   ) => {
+    // Clear highlights when switching roles
+    setSelectedDates([]);
     if (role === "manager") {
       setCurrentUser(ROLES.MANAGER);
+      setFocusedEmployeeId(null);
     } else {
       setCurrentUser(ROLES.EDITOR);
+      // Auto-focus the logged-in Escalator's row
+      setFocusedEmployeeId(id);
     }
     setLoggedInName(name);
     setLoggedInUserId(id);
