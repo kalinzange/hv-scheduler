@@ -2297,6 +2297,7 @@ const ShiftScheduler = () => {
     dateStr: string,
     empName: string
   ) => {
+    if (!canWrite) return;
     const rect = (e.target as HTMLElement).getBoundingClientRect();
     setEditingCell({
       key: `${empId}_${dateStr}`,
@@ -3704,9 +3705,16 @@ const ShiftScheduler = () => {
                           });
                           setLastSelectedDate(day.fullDate);
                         } else {
-                          // Single click - select this day and set as anchor
-                          setSelectedDates([day.fullDate]);
-                          setLastSelectedDate(day.fullDate);
+                          // Single click - toggle selection
+                          if (isSelected) {
+                            // If already selected, deselect
+                            setSelectedDates([]);
+                            setLastSelectedDate(null);
+                          } else {
+                            // If not selected, select it
+                            setSelectedDates([day.fullDate]);
+                            setLastSelectedDate(day.fullDate);
+                          }
                           setFocusedDate(null);
                         }
                       }}
@@ -3852,7 +3860,6 @@ const ShiftScheduler = () => {
                         >
                           <div
                             onClick={(e) => {
-                              alert("DIV CLICKED!");
                               handleCellClick(
                                 e,
                                 emp.id,
