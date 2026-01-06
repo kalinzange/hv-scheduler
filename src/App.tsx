@@ -533,8 +533,6 @@ const CellEditor = ({
 
 const ConfigPanel = ({
   show,
-  startDateStr,
-  setStartDateStr,
   team,
   setTeam,
   holidays,
@@ -649,39 +647,25 @@ const ConfigPanel = ({
 
       {/* ... existing General Params section ... */}
       <div className="bg-gray-50 p-3 rounded mb-4 border space-y-3">
-        <h4 className="text-xs font-bold text-gray-500 uppercase">
-          {t.generalParams}
-        </h4>
-        <div>
-          <label className="block text-xs text-gray-600 mb-1">
-            {t.startDate}
-          </label>
-          <input
-            type="date"
-            value={startDateStr}
-            onChange={(e) => setStartDateStr(e.target.value)}
-            className="w-full p-1 border rounded text-sm"
-          />
-        </div>
-        <div className="border-t pt-2 mt-2">
+        <div className="border-t pt-1.5 mt-0">
           <label className="block text-xs font-bold text-gray-600 mb-1 flex items-center gap-1">
             <Calendar size={12} /> {t.holidaysSection}
           </label>
-          <div className="flex gap-2 mb-2">
+          <div className="flex gap-1.5 mb-1.5">
             <input
               type="date"
               value={newHoliday}
               onChange={(e) => setNewHoliday(e.target.value)}
-              className="flex-1 p-1 border rounded text-xs"
+              className="flex-1 p-0.5 border rounded text-[10px]"
             />
             <button
               onClick={handleAddHoliday}
-              className="bg-indigo-100 text-indigo-700 px-2 rounded hover:bg-indigo-200"
+              className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded hover:bg-indigo-200"
             >
               <Plus size={14} />
             </button>
           </div>
-          <div className="max-h-24 overflow-y-auto space-y-1">
+          <div className="max-h-20 overflow-y-auto space-y-0.5">
             {holidays.map((h: string) => (
               <div
                 key={h}
@@ -706,47 +690,49 @@ const ConfigPanel = ({
           <ShieldAlert size={12} /> Coverage, Weekend & Hours
         </h4>
         <div>
-          <label className="block text-[10px] font-bold text-gray-600 mb-1">
+          <label className="block text-xs font-bold text-gray-600 mb-1">
             {t.minStaffWarn}
           </label>
-          <div className="grid grid-cols-3 gap-2">
-            <div>
-              <span className="text-[9px] block text-center">M</span>
-              <input
-                type="number"
-                value={minStaff.M}
-                onChange={(e) =>
-                  setMinStaff({ ...minStaff, M: +e.target.value })
-                }
-                className="w-full p-1 border rounded text-center"
-              />
-            </div>
-            <div>
-              <span className="text-[9px] block text-center">T</span>
-              <input
-                type="number"
-                value={minStaff.T}
-                onChange={(e) =>
-                  setMinStaff({ ...minStaff, T: +e.target.value })
-                }
-                className="w-full p-1 border rounded text-center"
-              />
-            </div>
-            <div>
-              <span className="text-[9px] block text-center">N</span>
-              <input
-                type="number"
-                value={minStaff.N}
-                onChange={(e) =>
-                  setMinStaff({ ...minStaff, N: +e.target.value })
-                }
-                className="w-full p-1 border rounded text-center"
-              />
+          <div className="overflow-x-auto">
+            <div className="grid grid-cols-3 gap-2 min-w-[300px]">
+              <div>
+                <span className="text-[9px] block text-center">M</span>
+                <input
+                  type="number"
+                  value={minStaff.M}
+                  onChange={(e) =>
+                    setMinStaff({ ...minStaff, M: +e.target.value })
+                  }
+                  className="w-full p-1 border rounded text-center"
+                />
+              </div>
+              <div>
+                <span className="text-[9px] block text-center">T</span>
+                <input
+                  type="number"
+                  value={minStaff.T}
+                  onChange={(e) =>
+                    setMinStaff({ ...minStaff, T: +e.target.value })
+                  }
+                  className="w-full p-1 border rounded text-center"
+                />
+              </div>
+              <div>
+                <span className="text-[9px] block text-center">N</span>
+                <input
+                  type="number"
+                  value={minStaff.N}
+                  onChange={(e) =>
+                    setMinStaff({ ...minStaff, N: +e.target.value })
+                  }
+                  className="w-full p-1 border rounded text-center"
+                />
+              </div>
             </div>
           </div>
         </div>
         <div className="border-t pt-2">
-          <label className="block text-[10px] font-bold text-gray-600 mb-1">
+          <label className="block text-xs font-bold text-gray-600 mb-1">
             {t.weekendSection}
           </label>
           <div className="flex gap-1">
@@ -754,7 +740,7 @@ const ConfigPanel = ({
               <button
                 key={day}
                 onClick={() => handleWeekendToggle(idx)}
-                className={`text-[9px] px-1.5 py-1 rounded border ${
+                className={`text-xs px-2 py-1 rounded border ${
                   weekendDays.includes(idx)
                     ? "bg-indigo-600 text-white"
                     : "bg-white text-gray-500"
@@ -766,46 +752,48 @@ const ConfigPanel = ({
           </div>
         </div>
         <div className="border-t pt-2">
-          <label className="block text-[10px] font-bold text-gray-600 mb-1">
+          <label className="block text-xs font-bold text-gray-600 mb-1">
             {t.hoursPerShift}
           </label>
-          <div className="grid grid-cols-3 gap-2 mb-2">
-            <div>
-              <span className="text-[9px] block text-center">M</span>
-              <input
-                type="number"
-                value={hoursConfig.M}
-                onChange={(e) =>
-                  setHoursConfig({ ...hoursConfig, M: +e.target.value })
-                }
-                className="w-full p-1 border rounded text-center"
-              />
-            </div>
-            <div>
-              <span className="text-[9px] block text-center">T</span>
-              <input
-                type="number"
-                value={hoursConfig.T}
-                onChange={(e) =>
-                  setHoursConfig({ ...hoursConfig, T: +e.target.value })
-                }
-                className="w-full p-1 border rounded text-center"
-              />
-            </div>
-            <div>
-              <span className="text-[9px] block text-center">N</span>
-              <input
-                type="number"
-                value={hoursConfig.N}
-                onChange={(e) =>
-                  setHoursConfig({ ...hoursConfig, N: +e.target.value })
-                }
-                className="w-full p-1 border rounded text-center"
-              />
+          <div className="overflow-x-auto mb-2">
+            <div className="grid grid-cols-3 gap-2 min-w-[300px]">
+              <div>
+                <span className="text-[9px] block text-center">M</span>
+                <input
+                  type="number"
+                  value={hoursConfig.M}
+                  onChange={(e) =>
+                    setHoursConfig({ ...hoursConfig, M: +e.target.value })
+                  }
+                  className="w-full p-1 border rounded text-center"
+                />
+              </div>
+              <div>
+                <span className="text-[9px] block text-center">T</span>
+                <input
+                  type="number"
+                  value={hoursConfig.T}
+                  onChange={(e) =>
+                    setHoursConfig({ ...hoursConfig, T: +e.target.value })
+                  }
+                  className="w-full p-1 border rounded text-center"
+                />
+              </div>
+              <div>
+                <span className="text-[9px] block text-center">N</span>
+                <input
+                  type="number"
+                  value={hoursConfig.N}
+                  onChange={(e) =>
+                    setHoursConfig({ ...hoursConfig, N: +e.target.value })
+                  }
+                  className="w-full p-1 border rounded text-center"
+                />
+              </div>
             </div>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-[10px] font-bold text-gray-600">
+            <span className="text-xs font-bold text-gray-600">
               {t.hoursTarget}
             </span>
             <input
@@ -819,14 +807,14 @@ const ConfigPanel = ({
           </div>
         </div>
         <div className="border-t pt-2">
-          <label className="block text-[10px] font-bold text-gray-600 mb-1">
+          <label className="block text-xs font-bold text-gray-600 mb-1">
             {t.langsSection}
           </label>
           <div className="flex flex-wrap gap-1">
             {ALL_LANGUAGES.map((lang) => (
               <label
                 key={lang}
-                className={`flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded cursor-pointer border ${
+                className={`flex items-center gap-1 text-xs px-2 py-1 rounded cursor-pointer border ${
                   requiredLangs.includes(lang)
                     ? "bg-indigo-100 border-indigo-300 text-indigo-800"
                     : "bg-white border-gray-200 text-gray-400"
@@ -874,73 +862,75 @@ const ConfigPanel = ({
             <Plus size={12} /> Add+
           </button>
         </div>
-        <div className="space-y-2">
-          {["M", "T", "N", "F", "V", "S", ...customShifts].map((type) => (
-            <div key={type} className="flex flex-wrap items-center gap-2">
-              <input
-                type="color"
-                value={colors[type]}
-                onChange={(e) =>
-                  setColors({ ...colors, [type]: e.target.value })
-                }
-                className="w-6 h-6 p-0 border-0 rounded cursor-pointer flex-shrink-0"
-              />
-              <span className="text-xs font-bold w-6 flex-shrink-0">
-                {type}
-              </span>
-              <input
-                value={legends[type] || ""}
-                onChange={(e) =>
-                  setLegends({ ...legends, [type]: e.target.value })
-                }
-                className="flex-1 min-w-[120px] p-1 border rounded text-xs"
-                placeholder="Description or hours"
-              />
-              {customShifts.includes(type) && (
-                <>
-                  <select
-                    value={customShiftIcons[type] || ""}
-                    onChange={(e) =>
-                      setCustomShiftIcons({
-                        ...customShiftIcons,
-                        [type]: e.target.value,
-                      })
-                    }
-                    className="p-1 border rounded text-xs flex-shrink-0 w-[100px]"
-                    title="Select icon for this shift"
-                  >
-                    <option value="">No Icon</option>
-                    <option value="utensils">🍽️ Utensils</option>
-                    <option value="graduation">🎓 Graduation</option>
-                    <option value="zap">⚡ Zap</option>
-                    <option value="hammer">🔨 Hammer</option>
-                    <option value="wrench">🔧 Wrench</option>
-                    <option value="trending">📈 Trending</option>
-                    <option value="award">🏆 Award</option>
-                    <option value="heart">❤️ Heart</option>
-                    <option value="book">📖 Book</option>
-                  </select>
-                  <button
-                    onClick={() => {
-                      setCustomShifts(
-                        customShifts.filter((s: string) => s !== type)
-                      );
-                      const { [type]: _, ...newLegends } = legends;
-                      const { [type]: __, ...newColors } = colors;
-                      const { [type]: ___, ...newIcons } = customShiftIcons;
-                      setLegends(newLegends);
-                      setColors(newColors);
-                      setCustomShiftIcons(newIcons);
-                    }}
-                    className="text-red-400 hover:text-red-600 flex-shrink-0"
-                    title="Remove custom shift"
-                  >
-                    <X size={14} />
-                  </button>
-                </>
-              )}
-            </div>
-          ))}
+        <div className="overflow-x-auto">
+          <div className="space-y-2">
+            {["M", "T", "N", "F", "V", "S", ...customShifts].map((type) => (
+              <div key={type} className="flex items-center gap-1 min-w-[400px]">
+                <input
+                  type="color"
+                  value={colors[type]}
+                  onChange={(e) =>
+                    setColors({ ...colors, [type]: e.target.value })
+                  }
+                  className="w-5 h-5 p-0 border-0 rounded cursor-pointer flex-shrink-0"
+                />
+                <span className="text-[10px] font-bold w-4 flex-shrink-0">
+                  {type}
+                </span>
+                <input
+                  value={legends[type] || ""}
+                  onChange={(e) =>
+                    setLegends({ ...legends, [type]: e.target.value })
+                  }
+                  className="w-32 p-1 border rounded text-[10px]"
+                  placeholder="Description or hours"
+                />
+                {customShifts.includes(type) && (
+                  <>
+                    <select
+                      value={customShiftIcons[type] || ""}
+                      onChange={(e) =>
+                        setCustomShiftIcons({
+                          ...customShiftIcons,
+                          [type]: e.target.value,
+                        })
+                      }
+                      className="p-1 border rounded text-[9px] flex-shrink-0 w-[85px]"
+                      title="Select icon for this shift"
+                    >
+                      <option value="">No Icon</option>
+                      <option value="utensils">🍽️ Utensils</option>
+                      <option value="graduation">🎓 Graduation</option>
+                      <option value="zap">⚡ Zap</option>
+                      <option value="hammer">🔨 Hammer</option>
+                      <option value="wrench">🔧 Wrench</option>
+                      <option value="trending">📈 Trending</option>
+                      <option value="award">🏆 Award</option>
+                      <option value="heart">❤️ Heart</option>
+                      <option value="book">📖 Book</option>
+                    </select>
+                    <button
+                      onClick={() => {
+                        setCustomShifts(
+                          customShifts.filter((s: string) => s !== type)
+                        );
+                        const { [type]: _, ...newLegends } = legends;
+                        const { [type]: __, ...newColors } = colors;
+                        const { [type]: ___, ...newIcons } = customShiftIcons;
+                        setLegends(newLegends);
+                        setColors(newColors);
+                        setCustomShiftIcons(newIcons);
+                      }}
+                      className="text-red-400 hover:text-red-600 flex-shrink-0"
+                      title="Remove custom shift"
+                    >
+                      <X size={12} />
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -958,6 +948,11 @@ const ConfigPanel = ({
         </div>
 
         <div className="space-y-3 pb-10">
+          {team.length === 0 && (
+            <div className="text-center text-xs text-gray-400 py-8 italic">
+              No employees yet
+            </div>
+          )}
           {team.map((emp: Employee) => (
             <div
               key={emp.id}
