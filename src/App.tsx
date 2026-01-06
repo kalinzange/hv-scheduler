@@ -40,6 +40,15 @@ import {
   Undo,
   Redo,
   Terminal,
+  Utensils,
+  GraduationCap,
+  Zap,
+  Hammer,
+  Wrench,
+  TrendingUp,
+  Award,
+  Heart,
+  BookOpen,
 } from "lucide-react";
 
 // --- FIREBASE IMPORTS ---
@@ -413,19 +422,39 @@ const AnnualViewModal = ({
   );
 };
 
+// Helper function to get icon component by name
+const getIconComponent = (iconName: string) => {
+  const iconMap: Record<string, any> = {
+    utensils: <Utensils size={14} />,
+    graduation: <GraduationCap size={14} />,
+    zap: <Zap size={14} />,
+    hammer: <Hammer size={14} />,
+    wrench: <Wrench size={14} />,
+    trending: <TrendingUp size={14} />,
+    award: <Award size={14} />,
+    heart: <Heart size={14} />,
+    book: <BookOpen size={14} />,
+  };
+  return iconMap[iconName.toLowerCase()] || null;
+};
+
 const CellEditor = ({
   cell,
   onClose,
   onUpdate,
   legends,
   customColors,
+  customShifts,
+  customShiftIcons,
 }: any) => {
+  // Build options dynamically from standard shifts and custom shifts
   const options: {
     id: OverrideType | "CLEAR";
     label: string;
     icon?: any;
     color: string;
   }[] = [
+    // Standard shifts
     { id: "M", label: `Morning (${legends.M})`, color: customColors.M },
     { id: "T", label: `Afternoon (${legends.T})`, color: customColors.T },
     { id: "N", label: `Night (${legends.N})`, color: customColors.N },
@@ -442,12 +471,15 @@ const CellEditor = ({
       icon: <Stethoscope size={14} />,
       color: customColors.S,
     },
-    {
-      id: "CLEAR",
-      label: "Reset to Auto",
-      icon: <Eraser size={14} />,
-      color: "#ffffff",
-    },
+    // Custom shifts
+    ...customShifts.map((shift: string) => ({
+      id: shift as OverrideType,
+      label: legends[shift] || shift,
+      icon: customShiftIcons[shift]
+        ? getIconComponent(customShiftIcons[shift])
+        : undefined,
+      color: customColors[shift] || "#999999",
+    })),
   ];
 
   // Lógica de deteção de fundo de ecrã
@@ -479,7 +511,7 @@ const CellEditor = ({
           <button
             key={opt.id}
             onClick={() => {
-              onUpdate(cell.key, opt.id === "CLEAR" ? undefined : opt.id);
+              onUpdate(cell.key, opt.id);
               onClose();
             }}
             className="flex items-center gap-2 p-2 text-xs rounded hover:bg-gray-100 text-left border transition-colors"
@@ -517,8 +549,8 @@ const ConfigPanel = ({
   setColors,
   customShifts,
   setCustomShifts,
-  customAbsenceReasons,
-  setCustomAbsenceReasons,
+  customShiftIcons,
+  setCustomShiftIcons,
   weekendDays,
   setWeekendDays,
   lang,
@@ -529,8 +561,6 @@ const ConfigPanel = ({
   if (!show) return null;
   const t = TRANSLATIONS[lang as LangCode];
   const [newHoliday, setNewHoliday] = useState("");
-  const [newShift, setNewShift] = useState("");
-  const [newAbsenceReason, setNewAbsenceReason] = useState("");
 
   const handleAddHoliday = () => {
     if (newHoliday && !holidays.includes(newHoliday)) {
@@ -815,147 +845,102 @@ const ConfigPanel = ({
         </div>
       </div>
 
-      {/* ... existing Legends section ... */}
+      {/* Shift Legends, Hours & Colors */}
       <div className="bg-gray-50 p-3 rounded mb-4 border space-y-3">
-        <h4 className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
-          <Palette size={12} /> {t.legendsSection} & {t.colorsSection}
-        </h4>
+        <div className="flex justify-between items-center mb-2">
+          <h4 className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
+            <Palette size={12} /> Shift Legends, Hours & Colors
+          </h4>
+          <button
+            onClick={() => {
+              const newLetter =
+                prompt("Enter shift letter (e.g., TR, AB):")?.toUpperCase() ||
+                "";
+              if (newLetter && newLetter.length === 2 && !colors[newLetter]) {
+                const description =
+                  prompt(
+                    "Enter description or hours (e.g., Training, 08:00-16:00):"
+                  ) || newLetter;
+                const defaultColor = `#${Math.floor(
+                  Math.random() * 16777215
+                ).toString(16)}`;
+                setLegends({ ...legends, [newLetter]: description });
+                setColors({ ...colors, [newLetter]: defaultColor });
+                setCustomShifts([...customShifts, newLetter]);
+              }
+            }}
+            className="flex items-center gap-1 bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-[10px] font-bold border border-indigo-200 hover:bg-indigo-200"
+          >
+            <Plus size={12} /> Add+
+          </button>
+        </div>
         <div className="space-y-2">
-          {["M", "T", "N", "F", "V", "S"].map((type) => (
-            <div key={type} className="flex items-center gap-2">
+          {["M", "T", "N", "F", "V", "S", ...customShifts].map((type) => (
+            <div key={type} className="flex flex-wrap items-center gap-2">
               <input
                 type="color"
                 value={colors[type]}
                 onChange={(e) =>
                   setColors({ ...colors, [type]: e.target.value })
                 }
-                className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
+                className="w-6 h-6 p-0 border-0 rounded cursor-pointer flex-shrink-0"
               />
-              <span className="text-xs font-bold w-4">{type}</span>
-              {["M", "T", "N"].includes(type) && (
-                <input
-                  value={legends[type]}
-                  onChange={(e) =>
-                    setLegends({ ...legends, [type]: e.target.value })
-                  }
-                  className="flex-1 p-1 border rounded text-xs"
-                />
-              )}
-              {["F", "V", "S"].includes(type) && (
-                <span className="text-xs text-gray-500 flex-1">
-                  {t[`leg${type}` as keyof typeof t]}
-                </span>
+              <span className="text-xs font-bold w-6 flex-shrink-0">
+                {type}
+              </span>
+              <input
+                value={legends[type] || ""}
+                onChange={(e) =>
+                  setLegends({ ...legends, [type]: e.target.value })
+                }
+                className="flex-1 min-w-[120px] p-1 border rounded text-xs"
+                placeholder="Description or hours"
+              />
+              {customShifts.includes(type) && (
+                <>
+                  <select
+                    value={customShiftIcons[type] || ""}
+                    onChange={(e) =>
+                      setCustomShiftIcons({
+                        ...customShiftIcons,
+                        [type]: e.target.value,
+                      })
+                    }
+                    className="p-1 border rounded text-xs flex-shrink-0 w-[100px]"
+                    title="Select icon for this shift"
+                  >
+                    <option value="">No Icon</option>
+                    <option value="utensils">🍽️ Utensils</option>
+                    <option value="graduation">🎓 Graduation</option>
+                    <option value="zap">⚡ Zap</option>
+                    <option value="hammer">🔨 Hammer</option>
+                    <option value="wrench">🔧 Wrench</option>
+                    <option value="trending">📈 Trending</option>
+                    <option value="award">🏆 Award</option>
+                    <option value="heart">❤️ Heart</option>
+                    <option value="book">📖 Book</option>
+                  </select>
+                  <button
+                    onClick={() => {
+                      setCustomShifts(
+                        customShifts.filter((s: string) => s !== type)
+                      );
+                      const { [type]: _, ...newLegends } = legends;
+                      const { [type]: __, ...newColors } = colors;
+                      const { [type]: ___, ...newIcons } = customShiftIcons;
+                      setLegends(newLegends);
+                      setColors(newColors);
+                      setCustomShiftIcons(newIcons);
+                    }}
+                    className="text-red-400 hover:text-red-600 flex-shrink-0"
+                    title="Remove custom shift"
+                  >
+                    <X size={14} />
+                  </button>
+                </>
               )}
             </div>
           ))}
-        </div>
-      </div>
-
-      {/* Custom Shifts & Absence Reasons */}
-      <div className="bg-gray-50 p-3 rounded mb-4 border space-y-3">
-        <h4 className="text-xs font-bold text-gray-500 uppercase">
-          Custom Shifts & Absence Reasons
-        </h4>
-
-        {/* Custom Shifts */}
-        <div>
-          <label className="block text-xs font-bold text-gray-600 mb-2">
-            Custom Shifts
-          </label>
-          <div className="flex gap-2 mb-2">
-            <input
-              type="text"
-              value={newShift}
-              onChange={(e) => setNewShift(e.target.value.toUpperCase())}
-              placeholder="e.g., TR (Training)"
-              className="flex-1 p-1 border rounded text-xs"
-              maxLength={2}
-            />
-            <button
-              onClick={() => {
-                if (newShift && !customShifts.includes(newShift)) {
-                  setCustomShifts([...customShifts, newShift]);
-                  setNewShift("");
-                }
-              }}
-              className="bg-indigo-100 text-indigo-700 px-2 rounded hover:bg-indigo-200"
-            >
-              <Plus size={14} />
-            </button>
-          </div>
-          <div className="max-h-24 overflow-y-auto space-y-1">
-            {customShifts.map((shift: string) => (
-              <div
-                key={shift}
-                className="flex justify-between items-center bg-white border px-2 py-1 rounded text-xs"
-              >
-                <span className="font-bold">{shift}</span>
-                <button
-                  onClick={() =>
-                    setCustomShifts(
-                      customShifts.filter((s: string) => s !== shift)
-                    )
-                  }
-                  className="text-red-400 hover:text-red-600"
-                >
-                  <X size={12} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Absence Reasons */}
-        <div className="border-t pt-3">
-          <label className="block text-xs font-bold text-gray-600 mb-2">
-            Absence Reasons
-          </label>
-          <div className="flex gap-2 mb-2">
-            <input
-              type="text"
-              value={newAbsenceReason}
-              onChange={(e) => setNewAbsenceReason(e.target.value)}
-              placeholder="e.g., Training"
-              className="flex-1 p-1 border rounded text-xs"
-            />
-            <button
-              onClick={() => {
-                if (
-                  newAbsenceReason &&
-                  !customAbsenceReasons.includes(newAbsenceReason)
-                ) {
-                  setCustomAbsenceReasons([
-                    ...customAbsenceReasons,
-                    newAbsenceReason,
-                  ]);
-                  setNewAbsenceReason("");
-                }
-              }}
-              className="bg-purple-100 text-purple-700 px-2 rounded hover:bg-purple-200"
-            >
-              <Plus size={14} />
-            </button>
-          </div>
-          <div className="max-h-24 overflow-y-auto space-y-1">
-            {customAbsenceReasons.map((reason: string) => (
-              <div
-                key={reason}
-                className="flex justify-between items-center bg-white border px-2 py-1 rounded text-xs"
-              >
-                <span>{reason}</span>
-                <button
-                  onClick={() =>
-                    setCustomAbsenceReasons(
-                      customAbsenceReasons.filter((r: string) => r !== reason)
-                    )
-                  }
-                  className="text-red-400 hover:text-red-600"
-                >
-                  <X size={12} />
-                </button>
-              </div>
-            ))}
-          </div>
         </div>
       </div>
 
@@ -1116,6 +1101,9 @@ const ShiftScheduler = () => {
     S: "#e5e7eb",
   });
   const [customShifts, setCustomShifts] = useState<string[]>([]);
+  const [customShiftIcons, setCustomShiftIcons] = useState<
+    Record<string, string>
+  >({});
   const [customAbsenceReasons, setCustomAbsenceReasons] = useState<string[]>(
     []
   );
@@ -1237,6 +1225,8 @@ const ShiftScheduler = () => {
               if (data.legends) setLegends(data.legends);
               if (data.colors) setColors(data.colors);
               if (data.customShifts) setCustomShifts(data.customShifts);
+              if (data.customShiftIcons)
+                setCustomShiftIcons(data.customShiftIcons);
               if (data.customAbsenceReasons)
                 setCustomAbsenceReasons(data.customAbsenceReasons);
               if (data.config) setConfig(data.config);
@@ -1374,6 +1364,7 @@ const ShiftScheduler = () => {
             legends,
             colors,
             customShifts,
+            customShiftIcons,
             customAbsenceReasons,
             overrides,
             publishedOverrides,
@@ -1405,6 +1396,7 @@ const ShiftScheduler = () => {
     legends,
     colors,
     customShifts,
+    customShiftIcons,
     customAbsenceReasons,
     overrides,
     publishedOverrides,
@@ -1513,6 +1505,7 @@ const ShiftScheduler = () => {
         legends,
         colors,
         customShifts,
+        customShiftIcons,
         customAbsenceReasons,
         overrides,
         config,
@@ -1552,6 +1545,7 @@ const ShiftScheduler = () => {
           if (s.legends) setLegends(s.legends);
           if (s.colors) setColors(s.colors);
           if (s.customShifts) setCustomShifts(s.customShifts);
+          if (s.customShiftIcons) setCustomShiftIcons(s.customShiftIcons);
           if (s.customAbsenceReasons)
             setCustomAbsenceReasons(s.customAbsenceReasons);
 
@@ -2602,6 +2596,8 @@ const ShiftScheduler = () => {
           onUpdate={handleOverride}
           legends={legends}
           customColors={colors}
+          customShifts={customShifts}
+          customShiftIcons={customShiftIcons}
         />
       )}
 
@@ -3111,8 +3107,8 @@ const ShiftScheduler = () => {
           setColors={setColors}
           customShifts={customShifts}
           setCustomShifts={setCustomShifts}
-          customAbsenceReasons={customAbsenceReasons}
-          setCustomAbsenceReasons={setCustomAbsenceReasons}
+          customShiftIcons={customShiftIcons}
+          setCustomShiftIcons={setCustomShiftIcons}
           weekendDays={weekendDays}
           setWeekendDays={setWeekendDays}
           lang={lang}
