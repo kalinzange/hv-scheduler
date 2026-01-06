@@ -2,6 +2,10 @@ import React, { useState, useEffect } from "react";
 import { Lock, UserCheck, AlertCircle, CheckCircle } from "lucide-react";
 import bcrypt from "bcryptjs";
 import type { Employee, Translations, RoleId } from "../types";
+import {
+  MANAGER_MASTER_PASSWORD,
+  ADMIN_MASTER_PASSWORD,
+} from "../config/constants";
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -49,11 +53,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     setError("");
 
     if (targetRole === "manager" || targetRole === "admin") {
-      const password1 = "Promocao2026!";
-      const password2 = "Admin@2026!";
       const isCorrect =
-        (targetRole === "manager" && password === password1) ||
-        (targetRole === "admin" && password === password2);
+        (targetRole === "manager" && password === MANAGER_MASTER_PASSWORD) ||
+        (targetRole === "admin" && password === ADMIN_MASTER_PASSWORD);
 
       if (isCorrect) {
         const name = targetRole === "admin" ? "Admin" : "Diretor";

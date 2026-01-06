@@ -14,6 +14,10 @@ export const FIREBASE_CONFIG = {
 
 export const APP_ID = import.meta.env.VITE_APP_ID;
 
+// --- MASTER PASSWORDS ---
+export const MANAGER_MASTER_PASSWORD = import.meta.env.VITE_MANAGER_MASTER_PASS;
+export const ADMIN_MASTER_PASSWORD = import.meta.env.VITE_ADMIN_MASTER_PASS;
+
 // --- ROLES & PERMISSIONS CONFIG ---
 export const ROLES: Record<string, Role> = {
   VIEWER: {

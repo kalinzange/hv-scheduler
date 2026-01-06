@@ -71,6 +71,49 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setSelectedUserId(null);
   };
 
+  const handleEncryptAllPasswords = async () => {
+    const plainTextCount = team.filter(
+      (u) => u.password && !u.password.startsWith("$2")
+    ).length;
+
+    if (plainTextCount === 0) {
+      setMessage("All passwords are already encrypted!");
+      setTimeout(() => setMessage(""), 3000);
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `This will encrypt ${plainTextCount} plain-text password(s). All users will need to change their password on next login. Continue?`
+      )
+    ) {
+      return;
+    }
+
+    setMessage("Encrypting passwords...");
+
+    const updatedTeam = await Promise.all(
+      team.map(async (user) => {
+        // Check if password is already hashed
+        if (!user.password || user.password.startsWith("$2")) {
+          return user;
+        }
+
+        // Hash the plain text password
+        const hashedPassword = await bcrypt.hash(user.password, 10);
+        return {
+          ...user,
+          password: hashedPassword,
+          requirePasswordChange: true,
+        };
+      })
+    );
+
+    setTeam(updatedTeam);
+    setMessage(`Successfully encrypted ${plainTextCount} password(s)!`);
+    setTimeout(() => setMessage(""), 5000);
+  };
+
   return (
     <div className="w-80 bg-white border-l shadow-lg overflow-y-auto flex flex-col h-full">
       <div className="sticky top-0 bg-gradient-to-r from-red-600 to-red-700 text-white p-4 flex items-center justify-between border-b shadow-md">
@@ -86,6 +129,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             {message}
           </div>
         )}
+
+        {/* Encrypt All Passwords Button */}
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <h3 className="font-bold text-gray-800 mb-2 flex items-center gap-2">
+            <Shield size={16} className="text-yellow-600" />
+            Security Actions
+          </h3>
+          <p className="text-xs text-gray-600 mb-3">
+            Encrypt all plain-text passwords in the database. This is a one-time
+            operation.
+          </p>
+          <button
+            onClick={handleEncryptAllPasswords}
+            className="w-full px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition font-medium text-sm shadow-sm"
+          >
+            🔒 Encrypt All Passwords
+          </button>
+        </div>
 
         <div>
           <h3 className="font-bold text-gray-800 mb-3">User Management</h3>
