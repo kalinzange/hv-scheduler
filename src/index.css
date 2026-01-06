@@ -1,1 +1,16 @@
 @import "tailwindcss";
+
+/* Ensure layout width matches the viewport and avoid horizontal scroll overshoot */
+:root,
+body,
+#root {
+  width: 100%;
+  max-width: 100vw;
+}
+
+body {
+  margin: 0;
+  background-color: #f8fafc;
+  color: #0f172a;
+  overflow-x: hidden;
+}

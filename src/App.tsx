@@ -1892,33 +1892,36 @@ const ShiftScheduler = () => {
     nextMonthExtraDays,
   ]);
 
-  // Auto-scroll to current date on mount
+  // Auto-scroll to today's column only when viewing the current month/year
   useEffect(() => {
-    const scrollToToday = () => {
-      const el = calendarRef.current;
-      if (!el) return;
+    const el = calendarRef.current;
+    if (!el) return;
 
-      const today = new Date();
-      const todayStr = `${today.getFullYear()}-${String(
-        today.getMonth() + 1
-      ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-      const todayIndex = calendarData.findIndex((d) => d.fullDate === todayStr);
+    const today = new Date();
+    if (
+      currentDate.getFullYear() !== today.getFullYear() ||
+      currentDate.getMonth() !== today.getMonth()
+    ) {
+      return; // Avoid jumping when editing data or viewing other months
+    }
 
-      if (todayIndex >= 0) {
-        setTimeout(() => {
-          const ths = el.querySelectorAll("table thead th");
-          const dayThs = Array.from(ths).slice(1) as HTMLElement[];
-          const todayTh = dayThs[todayIndex];
-          if (todayTh) {
-            const stickyWidth = (ths[0] as HTMLElement)?.offsetWidth || 0;
-            el.scrollLeft = todayTh.offsetLeft - stickyWidth - 100;
-          }
-        }, 100);
-      }
-    };
+    const todayStr = `${today.getFullYear()}-${String(
+      today.getMonth() + 1
+    ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const todayIndex = calendarData.findIndex((d) => d.fullDate === todayStr);
 
-    scrollToToday();
-  }, [calendarData]);
+    if (todayIndex >= 0) {
+      setTimeout(() => {
+        const ths = el.querySelectorAll("table thead th");
+        const dayThs = Array.from(ths).slice(1) as HTMLElement[];
+        const todayTh = dayThs[todayIndex];
+        if (todayTh) {
+          const stickyWidth = (ths[0] as HTMLElement)?.offsetWidth || 0;
+          el.scrollLeft = todayTh.offsetLeft - stickyWidth - 100;
+        }
+      }, 100);
+    }
+  }, [currentDate]);
 
   // Auto-append next-month days when user scrolls to right edge of calendar
   useEffect(() => {
@@ -2361,7 +2364,7 @@ const ShiftScheduler = () => {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50 text-xs sm:text-sm md:text-sm font-sans relative print:overflow-visible print:bg-white print:h-auto">
+    <div className="flex flex-col min-h-screen h-screen w-full overflow-x-hidden bg-gray-50 text-xs sm:text-sm md:text-sm font-sans relative print:overflow-visible print:bg-white print:h-auto">
       <style>{`
         @media print { 
           @page { size: landscape; margin: 10mm; } 
@@ -3436,7 +3439,7 @@ const ShiftScheduler = () => {
                         const isLastAnalysisRow = shiftIdx === 2;
                         return (
                           <td
-                            key={day.date}
+                            key={day.fullDate}
                             className={`border-b p-1 text-center text-[10px] ${
                               isFocused
                                 ? `bg-yellow-50 border-l-4 border-r-4 border-yellow-500 ${
@@ -3487,7 +3490,7 @@ const ShiftScheduler = () => {
                       const c = day.counts;
                       return (
                         <td
-                          key={day.date}
+                          key={day.fullDate}
                           className={`border-b border-r p-1 text-center text-[10px] ${
                             isFocused
                               ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
@@ -3530,7 +3533,7 @@ const ShiftScheduler = () => {
                       const total = day.counts.M + day.counts.T + day.counts.N;
                       return (
                         <td
-                          key={day.date}
+                          key={day.fullDate}
                           className={`border-b border-r p-1 text-center text-[10px] ${
                             isFocused
                               ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
@@ -3554,7 +3557,7 @@ const ShiftScheduler = () => {
                         day.counts.N * hoursConfig.N;
                       return (
                         <td
-                          key={day.date}
+                          key={day.fullDate}
                           className={`border-b border-r p-1 text-center text-[10px] ${
                             isFocused
                               ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
@@ -3577,7 +3580,7 @@ const ShiftScheduler = () => {
                       ).filter(Boolean).length;
                       return (
                         <td
-                          key={day.date}
+                          key={day.fullDate}
                           className={`border-b border-r p-1 text-center text-[10px] ${
                             isFocused
                               ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
@@ -3633,7 +3636,7 @@ const ShiftScheduler = () => {
 
                         return (
                           <td
-                            key={day.date}
+                            key={day.fullDate}
                             className={`border-b border-r p-1 text-center text-[10px] ${
                               isFocused
                                 ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
