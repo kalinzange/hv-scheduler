@@ -1,0 +1,120 @@
+/* Responsive Design Utilities */
+
+/* Mobile-first approach for better performance */
+
+/* Hide scrollbars on mobile for cleaner UI */
+@media (max-width: 640px) {
+  .hide-scrollbar {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none; /* Chrome, Safari and Opera */
+  }
+
+  /* Reduce padding and margins on small screens */
+  .reduce-padding {
+    padding: 0.25rem !important;
+  }
+
+  /* Stack buttons vertically on mobile */
+  .button-group {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  /* Make modals take full width on mobile */
+  .modal-mobile {
+    width: calc(100% - 1rem);
+    max-width: 100%;
+  }
+
+  /* Reduce font sizes on mobile */
+  .text-responsive {
+    font-size: 0.65rem;
+  }
+}
+
+/* Tablet (640px - 1024px) */
+@media (min-width: 640px) and (max-width: 1024px) {
+  .config-panel-tablet {
+    width: 280px;
+  }
+
+  table th,
+  table td {
+    min-width: 28px;
+    padding: 0.25rem;
+  }
+}
+
+/* Desktop and above (1024px+) */
+@media (min-width: 1024px) {
+  .config-panel-desktop {
+    width: 384px;
+  }
+
+  /* Smooth transitions for desktop */
+  .transition-smooth {
+    transition: all 200ms ease-in-out;
+  }
+}
+
+/* Print-specific responsive styles */
+@media print {
+  /* Hide UI controls */
+  .print-hide {
+    display: none !important;
+  }
+
+  /* Ensure tables print correctly */
+  table {
+    page-break-inside: avoid;
+    width: 100% !important;
+  }
+
+  table th,
+  table td {
+    border: 1px solid #000 !important;
+    page-break-inside: avoid;
+  }
+
+  /* Landscape orientation for schedules */
+  @page {
+    size: landscape;
+    margin: 10mm;
+  }
+
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+/* Accessibility - Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: more) {
+  body {
+    --color-text: #000;
+    --color-bg: #fff;
+  }
+
+  .high-contrast {
+    border: 2px solid currentColor;
+  }
+}
+
+/* Dark mode support (optional) */
+@media (prefers-color-scheme: dark) {
+  /* Define dark mode colors if needed */
+}

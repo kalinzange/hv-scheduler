@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
+import "./responsive.css";
 import {
   ChevronLeft,
   ChevronRight,
@@ -27,9 +28,7 @@ import {
   Lock,
   Eye,
   Edit3,
-  UserCheck,
   Inbox,
-  Check,
   ArrowDownZA,
   Briefcase,
   Languages as LangIcon,
@@ -40,10 +39,11 @@ import {
   Loader2,
   Undo,
   Redo,
+  Terminal,
 } from "lucide-react";
 
 // --- FIREBASE IMPORTS ---
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApp } from "firebase/app";
 import { getAuth, signInAnonymously } from "firebase/auth";
 import {
   getFirestore,
@@ -54,433 +54,32 @@ import {
   FirestoreError,
 } from "firebase/firestore";
 
-// --- FIREBASE CONFIGURATION (Hardcoded for stability) ---
-const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyB_wYXEQ2ZO3cj4oDKKb0kzqfkkE5LlNFM",
-  authDomain: "gcc-scheduler-3ef7f.firebaseapp.com",
-  projectId: "gcc-scheduler-3ef7f",
-  storageBucket: "gcc-scheduler-3ef7f.firebasestorage.app",
-  messagingSenderId: "712007349828",
-  appId: "1:712007349828:web:a8c931a6784a68b0beae11",
-};
-
-const APP_ID = "gcc-scheduler";
-
-// --- ROLES & PERMISSIONS CONFIG ---
-const ROLES = {
-  VIEWER: {
-    id: "viewer",
-    label: "Reader",
-    role: "viewer",
-    permissions: ["read"],
-    description: "Ready-only access to view the schedule.",
-  },
-  EDITOR: {
-    id: "editor",
-    label: "Escalador",
-    role: "editor",
-    permissions: ["read", "write", "self_only"],
-    description: "Can edit own schedule only.",
-  },
-  MANAGER: {
-    id: "manager",
-    label: "Manager",
-    role: "manager",
-    permissions: ["read", "write", "admin", "approve"],
-    description: "Full access to manage team schedules and approve requests.",
-  },
-};
-
-// --- TRANSLATIONS ---
-const TRANSLATIONS = {
-  en: {
-    title: "Shift Scheduler - GCC Team",
-    start: "Start",
-    pattern: "Pattern",
-    colaborador: "Employee",
-    cargo: "Role",
-    linguas: "Languages",
-    analise: "Coverage Analysis",
-    analiseDesc: "Missing languages or low staff",
-    faltas: "Issues",
-    manha: "Morning",
-    tarde: "Afternoon",
-    noite: "Night",
-    folga: "Off",
-    ferias: "Vacation",
-    baixa: "Sick",
-    exportCsv: "Excel",
-    print: "Print",
-    stats: "Stats",
-    annual: "Annual View",
-    config: "Settings",
-    adjustOffsets: "Adjust Offsets",
-    configPanelTitle: "Schedule Settings",
-    generalParams: "General Parameters",
-    startDate: "Rotation Start Date",
-    rotationPattern: "Rotation Pattern",
-    daysM: "Days Morning",
-    offsM: "Offs (Auto)",
-    daysT: "Days Afternoon",
-    offsT: "Offs (Auto)",
-    daysN: "Days Night",
-    offsN: "Offs (Manual)",
-    teamOffsets: "Team & Offsets",
-    langsLabel: "Languages (comma separated)",
-    name: "Name",
-    offset: "Offset",
-    printTitle: "Monthly Schedule",
-    generatedOn: "Generated on",
-    legend: "Legend",
-    legendDesc: "Shift Codes",
-    legM: "Morning",
-    legT: "Afternoon",
-    legN: "Night",
-    legF: "Day Off",
-    legV: "Vacation",
-    legS: "Sick Leave",
-    altActive: "* Alternating 2/3 days active",
-    fixed2: "* Fixed 2 days",
-    autoCalcInfo: "Auto M/T Offs: < 5 days = 1 Off; ≥ 5 days = 2 Offs.",
-    sortTeam: "Sort by Shift",
-    // New Settings
-    holidaysSection: "Holidays Management",
-    addHoliday: "Add Date",
-    minStaffSection: "Minimum Staff Level",
-    minStaffWarn: "Alert if count below:",
-    langsSection: "Mandatory Languages",
-    legendsSection: "Shift Legends & Hours",
-    colorsSection: "Shift Colors",
-    weekendSection: "Weekend Definition",
-    lowStaff: "Low Staff",
-    missing: "Missing",
-    restWarn: "Short Rest (<11h)",
-    // Stats & Hours
-    statsTitle: "Team Statistics & Hour Bank",
-    statName: "Name",
-    statM: "M",
-    statT: "T",
-    statN: "N",
-    statWE: "W.End",
-    statV: "Vac",
-    statTotal: "Shifts",
-    statHours: "Hours",
-    statBalance: "Balance",
-    hoursTarget: "Target Hours/Month",
-    hoursPerShift: "Hours per Shift",
-    // Annual
-    annualTitle: "Annual Planner",
-    selectEmp: "Select Employee:",
-    // Team Config
-    rotationMode: "Rotation Mode",
-    modeStandard: "Standard Rotation",
-    modeFixedM: "Fixed Morning",
-    modeFixedT: "Fixed Afternoon",
-    modeFixedN: "Fixed Night",
-    // Features
-    saveFile: "Save File",
-    loadFile: "Load File",
-    resetData: "Reset Data",
-    filters: "Filters",
-    roleFilter: "Role",
-    langFilter: "Language",
-    shiftFilter: "Shift",
-    sort: "Sort",
-    sortDefault: "Default",
-    sortAZ: "Name (A-Z)",
-    sortZA: "Name (Z-A)",
-    sortLang: "Languages",
-    sortRole: "Role",
-    all: "All",
-    bulkActions: "Actions",
-    planVacation: "Plan Vacation",
-    startDateVac: "Start Date",
-    endDateVac: "End Date",
-    apply: "Apply",
-    days: "days",
-    close: "Close",
-    // Permissions
-    readOnly: "Read Only Mode",
-    permissionDenied: "You do not have permission to edit.",
-    loginRequired: "Authentication Required",
-    selectUser: "Select Your Name",
-    password: "Password",
-    enterPass: "Enter Password",
-    login: "Login",
-    cancel: "Cancel",
-    accessGranted: "Access Granted",
-    invalidPass: "Invalid Password",
-    userLoginDesc: "Please identify yourself to access Editor mode.",
-    managerLoginDesc: "Please enter the administrative password.",
-    loggedInAs: "Logged in as",
-    changePass: "Change Password",
-    newPass: "New Password",
-    confirmPass: "Confirm Password",
-    passChanged: "Password changed successfully!",
-    defaultPassInfo: "Default password: '1234'",
-    backToLogin: "Back to Login",
-    passMismatch: "Passwords do not match",
-    // Requests
-    requests: "Requests",
-    pendingRequests: "Pending Requests",
-    noRequests: "No pending requests.",
-    reqDesc: "wants to change",
-    to: "to",
-    approve: "Approve",
-    reject: "Reject",
-    requestSent: "Request sent for approval!",
-    cantEditOthers: "You can only edit your own schedule!",
-    pending: "Pending Approval",
-    // Bulk
-    bulkTitle: "Bulk Actions",
-    bulkDesc: "Apply changes to date ranges",
-    target: "Target",
-    targetAll: "All Employees (Manager Only)",
-    shiftType: "Shift Type",
-    clearShifts: "Reset (Auto)",
-    applyToAll: "Apply to Entire Team",
-    warningBulk: "This will overwrite existing overrides!",
-    bulkSuccess: "Bulk action applied successfully!",
-    // Cloud
-    saving: "Saving...",
-    saved: "Saved to Cloud",
-    offline: "Offline",
-    loading: "Loading Data...",
-    undo: "Undo",
-    redo: "Redo",
-    selectMultiple: "Hold Ctrl or Shift to select multiple dates",
-    clearSelection: "Clear Selection",
-    selectedDays: "Selected Days",
-    applyToSelection: "Apply to Selection",
-  },
-};
-
-type LangCode = "en";
-
-// --- DATA TYPES & CONFIGURATION ---
-
-type ShiftType = "M" | "T" | "N" | "F";
-type OverrideType = ShiftType | "V" | "S"; // V=Vacation, S=Sick
-type Language = "EN" | "DE" | "IT" | "FR" | "PT" | "TR" | "ES";
-type RotationMode = "STANDARD" | "FIXED_M" | "FIXED_T" | "FIXED_N";
-type RequestStatus = "PENDING" | "APPROVED" | "REJECTED";
-
-const ALL_LANGUAGES: Language[] = ["EN", "DE", "IT", "FR", "PT", "TR", "ES"];
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-];
-
-interface RotationConfig {
-  morningDays: number;
-  afternoonDays: number;
-  nightDays: number;
-  nightOffs: number;
-  autoAdjustOffs: boolean;
-}
-
-interface Employee {
-  id: number;
-  name: string;
-  role: string;
-  languages: Language[];
-  offset: number;
-  rotationMode?: RotationMode;
-  password?: string;
-}
-
-interface ShiftRequest {
-  id: string;
-  empId: number;
-  empName: string;
-  date: string; // ISO Date string
-  newShift: OverrideType | undefined; // undefined means clear/reset
-  status: RequestStatus;
-  timestamp: number;
-}
-
-// Default Holidays
-const DEFAULT_HOLIDAYS = [
-  "2025-12-25",
-  "2026-01-01",
-  "2026-03-29",
-  "2026-04-25",
-  "2026-05-01",
-  "2026-06-10",
-  "2026-06-11",
-  "2026-08-15",
-  "2026-10-05",
-  "2026-11-01",
-  "2026-12-01",
-  "2026-12-08",
-  "2026-12-25",
-];
-
-const INITIAL_TEAM: Employee[] = [
-  {
-    id: 4,
-    name: "Huyesin Gozcu",
-    role: "GCC",
-    languages: ["EN", "TR", "PT"],
-    offset: 0,
-    password: "1234",
-  },
-  {
-    id: 6,
-    name: "Lourdes Gutierrez",
-    role: "GCC",
-    languages: ["EN", "ES", "FR"],
-    offset: 0,
-    password: "1234",
-  },
-  {
-    id: 3,
-    name: "Halima Talbi",
-    role: "Field Dispatch",
-    languages: ["EN", "IT", "FR", "PT"],
-    offset: 0,
-    password: "1234",
-  },
-  {
-    id: 5,
-    name: "Jonas Teixeira",
-    role: "Field Dispatch",
-    languages: ["EN", "PT", "DE"],
-    offset: 0,
-    password: "1234",
-  },
-  {
-    id: 12,
-    name: "Marcio Anjos",
-    role: "Remote Ops",
-    languages: ["EN", "PT"],
-    offset: 0,
-    password: "1234",
-  },
-  {
-    id: 11,
-    name: "Manistha",
-    role: "Field Dispatch",
-    languages: ["EN", "FR"],
-    offset: 0,
-    password: "1234",
-  },
-  {
-    id: 15,
-    name: "Ariadne Machado",
-    role: "GCC",
-    languages: ["EN", "PT", "ES", "IT", "FR"],
-    offset: 7,
-    password: "1234",
-  },
-  {
-    id: 13,
-    name: "Sibel Durgut",
-    role: "GCC",
-    languages: ["EN", "TR", "PT"],
-    offset: 7,
-    password: "1234",
-  },
-  {
-    id: 8,
-    name: "Dilan Catalkaya",
-    role: "Field Dispatch",
-    languages: ["EN", "TR", "DE"],
-    offset: 7,
-    password: "1234",
-  },
-  {
-    id: 17,
-    name: "Ghilles Abdelkader",
-    role: "Remote Ops",
-    languages: ["EN", "FR", "PT"],
-    offset: 7,
-    password: "1234",
-  },
-  {
-    id: 18,
-    name: "Gulami",
-    role: "GCC",
-    languages: ["EN", "TR", "DE"],
-    offset: 14,
-    password: "1234",
-  },
-  {
-    id: 19,
-    name: "Susana Sanchez",
-    role: "Field Dispatch",
-    languages: ["EN", "ES", "FR", "PT", "IT"],
-    offset: 14,
-    password: "1234",
-  },
-  {
-    id: 16,
-    name: "Berk Yecel",
-    role: "Field Dispatch",
-    languages: ["EN", "TR", "DE"],
-    offset: 14,
-    password: "1234",
-  },
-  {
-    id: 14,
-    name: "Aleksandar Jovanovic",
-    role: "Field Dispatch",
-    languages: ["EN", "PT", "IT"],
-    offset: 14,
-    password: "1234",
-  },
-  {
-    id: 9,
-    name: "Francisco Praia",
-    role: "Remote Ops",
-    languages: ["EN", "PT"],
-    offset: 14,
-    password: "1234",
-  },
-  {
-    id: 10,
-    name: "Luca Esposito",
-    role: "GCC",
-    languages: ["EN", "ES", "IT", "FR", "PT"],
-    offset: 36,
-    password: "1234",
-  },
-  {
-    id: 1,
-    name: "Arinze Obijiaku",
-    role: "Remote Ops",
-    languages: ["EN"],
-    offset: 5,
-    password: "1234",
-  },
-  {
-    id: 2,
-    name: "Daniel Nolden",
-    role: "GCC",
-    languages: ["EN", "DE"],
-    offset: 37,
-    password: "1234",
-  },
-  {
-    id: 7,
-    name: "Simone Robustelli",
-    role: "Remote Ops",
-    languages: ["EN", "IT", "PT"],
-    offset: 12,
-    password: "1234",
-  },
-];
+// --- LOCAL IMPORTS ---
+import type {
+  ShiftType,
+  OverrideType,
+  Language,
+  RotationConfig,
+  Employee,
+  ShiftRequest,
+  RoleId,
+  LangCode,
+} from "./types";
+import { LoginModal } from "./components/LoginModal";
+import { AdminPanel } from "./components/AdminPanel";
+import { RequestsModal } from "./components/RequestsModal";
+import { StatsModal } from "./components/StatsModal";
+import {
+  FIREBASE_CONFIG,
+  APP_ID,
+  ROLES,
+  ALL_LANGUAGES,
+  WEEKDAYS,
+  MONTHS,
+  DEFAULT_HOLIDAYS,
+  INITIAL_TEAM,
+} from "./config/constants";
+import { TRANSLATIONS } from "./utils/translations";
 
 // --- LOGIC HELPERS ---
 
@@ -536,333 +135,6 @@ const checkShiftOverflow = (
 };
 
 // --- COMPONENTS ---
-
-const RequestsModal = ({
-  isOpen,
-  onClose,
-  requests,
-  onApprove,
-  onReject,
-  t,
-}: any) => {
-  if (!isOpen) return null;
-
-  const pending = requests
-    .filter((r: ShiftRequest) => r.status === "PENDING")
-    .sort((a: ShiftRequest, b: ShiftRequest) => b.timestamp - a.timestamp);
-
-  return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg flex flex-col max-h-[80vh]">
-        <div className="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-lg">
-          <h3 className="font-bold text-lg flex items-center gap-2">
-            <Inbox size={20} className="text-indigo-600" /> {t.pendingRequests}
-          </h3>
-          <button onClick={onClose} className="p-1 hover:bg-gray-200 rounded">
-            <X size={20} />
-          </button>
-        </div>
-        <div className="overflow-y-auto p-4 flex-1">
-          {pending.length === 0 ? (
-            <div className="text-center text-gray-500 py-8 flex flex-col items-center gap-2">
-              <CheckCircle size={48} className="text-gray-200" />
-              {t.noRequests}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {pending.map((req: ShiftRequest) => (
-                <div
-                  key={req.id}
-                  className="border rounded-lg p-3 bg-white shadow-sm flex items-start gap-3"
-                >
-                  <div className="bg-yellow-100 text-yellow-700 p-2 rounded-full">
-                    <Clock size={20} />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex justify-between items-start">
-                      <span className="font-bold text-gray-800">
-                        {req.empName}
-                      </span>
-                      <span className="text-xs text-gray-400">
-                        {new Date(req.timestamp).toLocaleTimeString()}
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-600 mt-1">
-                      {t.reqDesc}{" "}
-                      <span className="font-mono bg-gray-100 px-1 rounded">
-                        {req.date}
-                      </span>{" "}
-                      {t.to} <strong>{req.newShift || "Auto"}</strong>
-                    </p>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <button
-                      onClick={() => onApprove(req)}
-                      className="p-1.5 bg-green-100 text-green-700 rounded hover:bg-green-200"
-                      title={t.approve}
-                    >
-                      <Check size={18} />
-                    </button>
-                    <button
-                      onClick={() => onReject(req)}
-                      className="p-1.5 bg-red-100 text-red-700 rounded hover:bg-red-200"
-                      title={t.reject}
-                    >
-                      <X size={18} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const LoginModal = ({
-  isOpen,
-  onClose,
-  targetRole,
-  team,
-  onLoginSuccess,
-  onPasswordUpdate,
-  t,
-}: any) => {
-  const [password, setPassword] = useState("");
-  const [selectedUser, setSelectedUser] = useState("");
-  const [error, setError] = useState("");
-  const [successMsg, setSuccessMsg] = useState("");
-  const [isChangeMode, setIsChangeMode] = useState(false);
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-
-  useEffect(() => {
-    if (isOpen) {
-      setPassword("");
-      setSelectedUser("");
-      setError("");
-      setSuccessMsg("");
-      setIsChangeMode(false);
-      setNewPassword("");
-      setConfirmPassword("");
-    }
-  }, [isOpen, targetRole]);
-
-  if (!isOpen) return null;
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-
-    if (targetRole === "manager") {
-      if (password === "Promocao2026!") {
-        onLoginSuccess("manager", "Diretor", 0); // Manager ID 0
-        onClose();
-      } else {
-        setError(t.invalidPass);
-      }
-    } else if (targetRole === "editor") {
-      if (!selectedUser) {
-        setError(t.selectUser);
-        return;
-      }
-      const user = team.find((u: any) => u.id === +selectedUser);
-      const userPass = user.password || "1234";
-      if (password === userPass) {
-        onLoginSuccess("editor", user.name, user.id); // Pass User ID
-        onClose();
-      } else {
-        setError(t.invalidPass);
-      }
-    }
-  };
-
-  const handleChangePassword = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedUser) {
-      setError(t.selectUser);
-      return;
-    }
-    const user = team.find((u: any) => u.id === +selectedUser);
-    const currentStoredPass = user.password || "1234";
-    if (password !== currentStoredPass) {
-      setError(t.invalidPass);
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setError(t.passMismatch);
-      return;
-    }
-    if (newPassword.length < 3) {
-      setError("Password too short");
-      return;
-    }
-    onPasswordUpdate(+selectedUser, newPassword);
-    setSuccessMsg(t.passChanged);
-    setIsChangeMode(false);
-    setPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200 backdrop-blur-sm">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col transform transition-all">
-        <div className="bg-indigo-600 p-6 text-center">
-          <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 text-white">
-            {targetRole === "manager" ? (
-              <Lock size={32} />
-            ) : (
-              <UserCheck size={32} />
-            )}
-          </div>
-          <h3 className="text-xl font-bold text-white">
-            {isChangeMode ? t.changePass : t.loginRequired}
-          </h3>
-          <p className="text-indigo-200 text-sm mt-1">
-            {targetRole === "manager" ? t.managerLoginDesc : t.userLoginDesc}
-          </p>
-        </div>
-        <div className="p-8">
-          {error && (
-            <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-center gap-2 border border-red-100 animate-shake mb-4">
-              <AlertCircle size={16} /> {error}
-            </div>
-          )}
-          {successMsg && (
-            <div className="bg-green-50 text-green-600 p-3 rounded-lg text-sm flex items-center gap-2 border border-green-100 mb-4">
-              <CheckCircle size={16} /> {successMsg}
-            </div>
-          )}
-
-          {!isChangeMode && (
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {targetRole === "editor" && (
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    {t.selectUser}
-                  </label>
-                  <select
-                    value={selectedUser}
-                    onChange={(e) => setSelectedUser(e.target.value)}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
-                    required
-                  >
-                    <option value="">{t.selectUser}</option>
-                    {team.map((u: any) => (
-                      <option key={u.id} value={u.id}>
-                        {u.name} - {u.role}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  {t.password}
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
-                  placeholder="••••••••"
-                  required
-                />
-              </div>
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="flex-1 py-3 text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition"
-                >
-                  {t.cancel}
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-3 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition flex items-center justify-center gap-2"
-                >
-                  <Lock size={16} />
-                  {t.login}
-                </button>
-              </div>
-              {targetRole === "editor" && (
-                <button
-                  type="button"
-                  onClick={() => setIsChangeMode(true)}
-                  className="w-full text-sm text-indigo-600 hover:text-indigo-700 font-medium"
-                >
-                  {t.changePass}
-                </button>
-              )}
-            </form>
-          )}
-
-          {isChangeMode && (
-            <form onSubmit={handleChangePassword} className="space-y-6">
-              <div className="p-3 bg-blue-50 text-blue-700 text-xs rounded mb-4">
-                Updating password for:{" "}
-                <strong>
-                  {team.find((u: any) => u.id === +selectedUser)?.name}
-                </strong>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-500 mb-1">
-                  {t.password} (Current)
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full p-2 border rounded"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-500 mb-1">
-                  {t.newPass}
-                </label>
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full p-2 border rounded"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-500 mb-1">
-                  {t.confirmPass}
-                </label>
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full p-2 border rounded"
-                />
-              </div>
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setIsChangeMode(false)}
-                  className="flex-1 py-2 text-sm text-gray-600 bg-gray-100 rounded"
-                >
-                  {t.backToLogin}
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2 text-sm font-bold text-white bg-green-600 rounded"
-                >
-                  {t.changePass}
-                </button>
-              </div>
-            </form>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
 
 const BulkActionModal = ({
   isOpen,
@@ -1135,98 +407,6 @@ const AnnualViewModal = ({
               </div>
             ))}
           </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const StatsModal = ({ isOpen, onClose, data, t, hoursConfig }: any) => {
-  if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="p-4 border-b flex justify-between items-center bg-gray-50">
-          <h3 className="font-bold text-lg flex items-center gap-2">
-            <BarChart3 size={20} /> {t.statsTitle}
-          </h3>
-          <button onClick={onClose} className="p-1 hover:bg-gray-200 rounded">
-            <X size={20} />
-          </button>
-        </div>
-        <div className="overflow-auto flex-1 p-4">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="bg-gray-100 text-left">
-                <th className="p-2 border">{t.statName}</th>
-                <th className="p-2 border text-center bg-green-50">
-                  {t.statM}
-                </th>
-                <th className="p-2 border text-center bg-orange-50">
-                  {t.statT}
-                </th>
-                <th className="p-2 border text-center bg-blue-50">{t.statN}</th>
-                <th className="p-2 border text-center bg-purple-50">
-                  {t.statWE}
-                </th>
-                <th className="p-2 border text-center bg-pink-50">{t.statV}</th>
-                <th className="p-2 border text-center font-bold">
-                  {t.statTotal}
-                </th>
-                <th className="p-2 border text-center bg-yellow-50 font-bold">
-                  {t.statHours}
-                </th>
-                <th className="p-2 border text-center bg-gray-200 font-bold">
-                  {t.statBalance}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((row: any) => {
-                const balance = row.Hours - hoursConfig.target;
-                return (
-                  <tr key={row.name} className="hover:bg-gray-50 border-b">
-                    <td className="p-2 border font-medium">{row.name}</td>
-                    <td className="p-2 border text-center">{row.M}</td>
-                    <td className="p-2 border text-center">{row.T}</td>
-                    <td className="p-2 border text-center">{row.N}</td>
-                    <td className="p-2 border text-center font-bold text-purple-700">
-                      {row.WE}
-                    </td>
-                    <td className="p-2 border text-center text-pink-600">
-                      {row.V}
-                    </td>
-                    <td className="p-2 border text-center font-bold">
-                      {row.Total}
-                    </td>
-                    <td className="p-2 border text-center bg-yellow-50 font-mono">
-                      {row.Hours}h
-                    </td>
-                    <td
-                      className={`p-2 border text-center font-bold font-mono ${
-                        balance >= 0 ? "text-green-600" : "text-red-600"
-                      }`}
-                    >
-                      {balance > 0 ? "+" : ""}
-                      {balance}h
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <div className="p-3 border-t bg-gray-50 flex justify-between items-center text-xs text-gray-500">
-          <span>
-            Target: {hoursConfig.target}h/month | Values: M={hoursConfig.M}h, T=
-            {hoursConfig.T}h, N={hoursConfig.N}h
-          </span>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-gray-800 text-white rounded hover:bg-gray-700"
-          >
-            {t.close}
-          </button>
         </div>
       </div>
     </div>
@@ -1815,15 +995,20 @@ const ShiftScheduler = () => {
   const [saveStatus, setSaveStatus] = useState<
     "saved" | "saving" | "error" | "offline"
   >("offline");
-  const [currentDate, setCurrentDate] = useState(new Date(2025, 11, 15));
-  const [visibleMonthDate, setVisibleMonthDate] = useState<Date>(
-    new Date(2025, 11, 15)
-  );
+  const [currentDate, setCurrentDate] = useState(() => {
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth(), 1);
+  });
+  const [visibleMonthDate, setVisibleMonthDate] = useState<Date>(() => {
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth(), 1);
+  });
   const [showConfig, setShowConfig] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [showAnnual, setShowAnnual] = useState(false);
   const [showRequests, setShowRequests] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
   const [lang] = useState<LangCode>("en");
   const [editingCell, setEditingCell] = useState<{
     key: string;
@@ -1834,9 +1019,7 @@ const ShiftScheduler = () => {
   } | null>(null);
   const [currentUser, setCurrentUser] = useState(ROLES.VIEWER);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
-  const [targetRole, setTargetRole] = useState<"manager" | "editor" | null>(
-    null
-  );
+  const [targetRole, setTargetRole] = useState<RoleId | null>(null);
   const [loggedInName, setLoggedInName] = useState<string>("");
   const [loggedInUserId, setLoggedInUserId] = useState<number>(0);
   const [preSelectedBulkId, setPreSelectedBulkId] = useState<string>("");
@@ -1852,7 +1035,7 @@ const ShiftScheduler = () => {
   const savedScrollRef = useRef<number>(0);
 
   const canWrite = currentUser.permissions.includes("write");
-  const canAccessSettings = currentUser.role === "manager" || canWrite;
+  const canAccessSettings = currentUser.role === "manager";
   const isManager = currentUser.role === "manager";
 
   const [roleFilter, setRoleFilter] = useState("All");
@@ -1904,17 +1087,14 @@ const ShiftScheduler = () => {
   >([]);
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [lastSelectedDate, setLastSelectedDate] = useState<string | null>(null);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
 
   // Track if manager has made changes since last publish
   useEffect(() => {
-    if (
-      isManager &&
-      JSON.stringify(overrides) !== JSON.stringify(publishedOverrides)
-    ) {
-      setHasUnpublishedChanges(true);
-    } else {
-      setHasUnpublishedChanges(false);
-    }
+    if (!isManager) return;
+    const hasChanges =
+      JSON.stringify(overrides) !== JSON.stringify(publishedOverrides);
+    setHasUnpublishedChanges(hasChanges);
   }, [overrides, publishedOverrides, isManager]);
 
   const [config, setConfig] = useState<RotationConfig>({
@@ -1932,77 +1112,186 @@ const ShiftScheduler = () => {
   });
   const [teamState, setTeamState] = useState<Employee[]>(INITIAL_TEAM);
   const [requests, setRequests] = useState<ShiftRequest[]>([]);
+  const retryCountRef = useRef(0);
+  const maxRetries = 5;
 
   // --- FIREBASE INIT & SYNC ---
   useEffect(() => {
-    if (!FIREBASE_CONFIG.apiKey) {
-      console.warn("Firebase config missing. Running in offline mode.");
-      setIsLoading(false);
-      setSaveStatus("offline");
-      return;
-    }
+    let unsubscribe: (() => void) | null = null;
+    let retryTimeout: ReturnType<typeof setTimeout> | null = null;
+    let isComponentMounted = true;
 
-    const app = initializeApp(FIREBASE_CONFIG);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
+    const initializeFirebase = () => {
+      console.log("[Firebase] Initializing...");
 
-    const initAuth = async () => {
-      await signInAnonymously(auth);
-    };
-    initAuth();
-
-    const dataDocRef = doc(
-      db,
-      "artifacts",
-      APP_ID,
-      "public",
-      "data",
-      "shift_scheduler",
-      "global_state"
-    );
-
-    const unsubscribe = onSnapshot(
-      dataDocRef,
-      (docSnap: DocumentSnapshot) => {
-        if (docSnap.exists()) {
-          // Mark this update as coming from the cloud to prevent immediate re-save
-          isRemoteUpdate.current = true;
-
-          const data = docSnap.data();
-          if (data.startDateStr) setStartDateStr(data.startDateStr);
-          if (data.holidays) setHolidays(data.holidays);
-          if (data.minStaff) setMinStaff(data.minStaff);
-          if (data.requiredLangs) setRequiredLangs(data.requiredLangs);
-          if (data.weekendDays) setWeekendDays(data.weekendDays);
-          if (data.legends) setLegends(data.legends);
-          if (data.colors) setColors(data.colors);
-          if (data.overrides) setOverrides(data.overrides);
-          if (data.publishedOverrides)
-            setPublishedOverrides(data.publishedOverrides);
-          else if (data.overrides) setPublishedOverrides(data.overrides); // Fallback for old data
-          if (data.config) setConfig(data.config);
-          if (data.hoursConfig) setHoursConfig(data.hoursConfig);
-          if (data.team) setTeamState(data.team);
-          if (data.requests) setRequests(data.requests);
-
-          setInitError(false); // Sucesso: Limpa erro
+      if (!FIREBASE_CONFIG.apiKey) {
+        console.warn("[Firebase] Config missing. Running in offline mode.");
+        if (isComponentMounted) {
           setIsLoading(false);
-          setSaveStatus("saved");
-        } else {
-          // Documento não existe (primeira vez ever), permite iniciar
-          setInitError(false);
-          setIsLoading(false);
+          setSaveStatus("offline");
         }
-      },
-      (error: FirestoreError) => {
-        console.error("Firebase Read Error:", error);
-        setSaveStatus("error");
-        setInitError(true); // ERRO: Bloqueia a app para não gravar dados vazios
-        setIsLoading(false);
+        return;
       }
-    );
 
-    return () => unsubscribe();
+      try {
+        console.log(
+          "[Firebase] Initializing app with project:",
+          FIREBASE_CONFIG.projectId
+        );
+        const app = initializeApp(FIREBASE_CONFIG);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        const initAuth = async () => {
+          try {
+            console.log("[Firebase] Signing in anonymously...");
+            await signInAnonymously(auth);
+            console.log("[Firebase] Anonymous auth successful");
+            retryCountRef.current = 0; // Reset retry count on success
+          } catch (authError: any) {
+            console.error(
+              "[Firebase] Auth Error:",
+              authError?.code,
+              authError?.message
+            );
+            // Retry after delay
+            scheduleRetry();
+          }
+        };
+        initAuth();
+
+        const dataDocRef = doc(
+          db,
+          "artifacts",
+          APP_ID,
+          "public",
+          "data",
+          "shift_scheduler",
+          "global_state"
+        );
+
+        console.log(
+          "[Firebase] Setting up listener for:",
+          `artifacts/${APP_ID}/public/data/shift_scheduler/global_state`
+        );
+
+        unsubscribe = onSnapshot(
+          dataDocRef,
+          (docSnap: DocumentSnapshot) => {
+            if (!isComponentMounted) return;
+
+            if (docSnap.exists()) {
+              console.log("[Firebase] Document found. Loading data...");
+              // Mark this update as coming from the cloud to prevent immediate re-save
+              isRemoteUpdate.current = true;
+
+              const data = docSnap.data();
+
+              // Batch state updates to reduce re-renders
+              if (data.startDateStr) setStartDateStr(data.startDateStr);
+              if (data.holidays) setHolidays(data.holidays);
+              if (data.minStaff) setMinStaff(data.minStaff);
+              if (data.requiredLangs) setRequiredLangs(data.requiredLangs);
+              if (data.weekendDays) setWeekendDays(data.weekendDays);
+              if (data.legends) setLegends(data.legends);
+              if (data.colors) setColors(data.colors);
+              if (data.config) setConfig(data.config);
+              if (data.hoursConfig) setHoursConfig(data.hoursConfig);
+              if (data.team) setTeamState(data.team);
+              if (data.requests) setRequests(data.requests);
+
+              // Handle overrides separately to avoid double updates
+              if (data.overrides) setOverrides(data.overrides);
+              if (data.publishedOverrides) {
+                setPublishedOverrides(data.publishedOverrides);
+              } else if (data.overrides) {
+                setPublishedOverrides(data.overrides);
+              }
+
+              setInitError(false);
+              setIsLoading(false);
+              setSaveStatus("saved");
+              console.log("[Firebase] Data loaded successfully");
+              retryCountRef.current = 0; // Reset retry count on success
+            } else {
+              // Document doesn't exist yet - initialize with defaults
+              console.log(
+                "[Firebase] Document not found. Will use default data."
+              );
+              setInitError(false);
+              setIsLoading(false);
+              setSaveStatus("saved");
+              retryCountRef.current = 0; // Reset retry count on success
+            }
+          },
+          (error: FirestoreError) => {
+            if (!isComponentMounted) return;
+
+            console.error("[Firebase] Read Error:", {
+              code: error.code,
+              message: error.message,
+              details: error,
+            });
+            // Allow offline mode fallback
+            setInitError(false);
+            setIsLoading(false);
+            setSaveStatus("offline");
+            console.warn(
+              "[Firebase] Running in offline mode. Changes will be saved locally."
+            );
+            // Attempt retry
+            scheduleRetry();
+          }
+        );
+      } catch (error: any) {
+        if (!isComponentMounted) return;
+
+        console.error("[Firebase] Initialization error:", {
+          message: error?.message,
+          code: error?.code,
+          details: error,
+        });
+        setInitError(false);
+        setIsLoading(false);
+        setSaveStatus("offline");
+        // Attempt retry
+        scheduleRetry();
+      }
+    };
+
+    const scheduleRetry = () => {
+      if (retryCountRef.current >= maxRetries) {
+        console.log("[Firebase] Max retries reached. Staying in offline mode.");
+        return;
+      }
+
+      const delayMs = Math.min(
+        1000 * Math.pow(2, retryCountRef.current),
+        30000
+      ); // Exponential backoff, max 30s
+      console.log(
+        `[Firebase] Scheduling reconnection attempt ${
+          retryCountRef.current + 1
+        }/${maxRetries} in ${delayMs}ms...`
+      );
+      retryCountRef.current++;
+
+      retryTimeout = setTimeout(() => {
+        if (isComponentMounted) {
+          console.log("[Firebase] Attempting to reconnect...");
+          if (unsubscribe) unsubscribe();
+          initializeFirebase();
+        }
+      }, delayMs);
+    };
+
+    initializeFirebase();
+
+    return () => {
+      isComponentMounted = false;
+      if (unsubscribe) unsubscribe();
+      if (retryTimeout) clearTimeout(retryTimeout);
+    };
   }, []);
 
   // --- SAVE TO FIREBASE (Debounced) ---
@@ -2017,45 +1306,50 @@ const ShiftScheduler = () => {
     }
 
     setSaveStatus("saving");
-    const app = initializeApp(FIREBASE_CONFIG);
-    const db = getFirestore(app);
-    const dataDocRef = doc(
-      db,
-      "artifacts",
-      APP_ID,
-      "public",
-      "data",
-      "shift_scheduler",
-      "global_state"
-    );
+    try {
+      const app = getApp(); // Usa a app já inicializada em vez de reinicializar
+      const db = getFirestore(app);
+      const dataDocRef = doc(
+        db,
+        "artifacts",
+        APP_ID,
+        "public",
+        "data",
+        "shift_scheduler",
+        "global_state"
+      );
 
-    const saveData = async () => {
-      try {
-        await setDoc(dataDocRef, {
-          startDateStr,
-          holidays,
-          minStaff,
-          requiredLangs,
-          weekendDays,
-          legends,
-          colors,
-          overrides,
-          publishedOverrides,
-          config,
-          hoursConfig,
-          team: teamState,
-          requests,
-          lastUpdated: Date.now(),
-        });
-        setSaveStatus("saved");
-      } catch (err) {
-        console.error("Firebase Save Error:", err);
-        setSaveStatus("error");
-      }
-    };
+      const saveData = async () => {
+        try {
+          await setDoc(dataDocRef, {
+            startDateStr,
+            holidays,
+            minStaff,
+            requiredLangs,
+            weekendDays,
+            legends,
+            colors,
+            overrides,
+            publishedOverrides,
+            config,
+            hoursConfig,
+            team: teamState,
+            requests,
+            lastUpdated: Date.now(),
+          });
+          setSaveStatus("saved");
+        } catch (err) {
+          console.error("Firebase Save Error:", err);
+          setSaveStatus("error");
+        }
+      };
 
-    const timer = setTimeout(saveData, 2000);
-    return () => clearTimeout(timer);
+      const timer = setTimeout(saveData, 2000);
+      return () => clearTimeout(timer);
+    } catch (err) {
+      console.error("Firebase not initialized yet, will retry on next change");
+      setSaveStatus("offline");
+    }
   }, [
     startDateStr,
     holidays,
@@ -2065,11 +1359,13 @@ const ShiftScheduler = () => {
     legends,
     colors,
     overrides,
+    publishedOverrides,
     config,
     hoursConfig,
     teamState,
     requests,
     isLoading,
+    initError,
   ]);
 
   const handleReset = () => {
@@ -2095,38 +1391,42 @@ const ShiftScheduler = () => {
       setLoggedInName("");
       setLoggedInUserId(0);
       setShowConfig(false);
+      setShowAdmin(false);
       // Clear highlights when switching roles
       setFocusedEmployeeId(null);
       setSelectedDates([]);
       return;
     }
-    setTargetRole(roleKey === "MANAGER" ? "manager" : "editor");
+    if (roleKey === "ADMIN") {
+      setTargetRole("admin");
+    } else if (roleKey === "MANAGER") {
+      setTargetRole("manager");
+    } else {
+      setTargetRole("editor");
+    }
     setLoginModalOpen(true);
   };
 
-  const handleLoginSuccess = (
-    role: "manager" | "editor",
-    name: string,
-    id: number
-  ) => {
+  const handleLoginSuccess = (role: RoleId, name: string, id: number) => {
     // Clear highlights when switching roles
     setSelectedDates([]);
     if (role === "manager") {
       setCurrentUser(ROLES.MANAGER);
       setFocusedEmployeeId(null);
-    } else {
+    } else if (role === "admin") {
+      setCurrentUser(ROLES.ADMIN);
+      setFocusedEmployeeId(null);
+    } else if (role === "editor") {
       setCurrentUser(ROLES.EDITOR);
       // Auto-focus the logged-in Escalator's row
       setFocusedEmployeeId(id);
+    } else {
+      // viewer role
+      setCurrentUser(ROLES.VIEWER);
+      setFocusedEmployeeId(null);
     }
     setLoggedInName(name);
     setLoggedInUserId(id);
-  };
-
-  const handlePasswordUpdate = (userId: number, newPass: string) => {
-    setTeamState((prevTeam) =>
-      prevTeam.map((u) => (u.id === userId ? { ...u, password: newPass } : u))
-    );
   };
 
   // --- REQUEST LOGIC ---
@@ -2306,6 +1606,8 @@ const ShiftScheduler = () => {
     empName: string
   ) => {
     if (!canWrite) return;
+    // In Editor mode, only allow editing own cells
+    if (currentUser.role === "editor" && empId !== loggedInUserId) return;
     const rect = (e.target as HTMLElement).getBoundingClientRect();
     setEditingCell({
       key: `${empId}_${dateStr}`,
@@ -2422,6 +1724,14 @@ const ShiftScheduler = () => {
     const days = [];
     const locale = "en-GB";
 
+    // Pre-compute pending requests map for faster lookup
+    const pendingRequestsMap = new Map<string, boolean>();
+    requests.forEach((r) => {
+      if (r.status === "PENDING") {
+        pendingRequestsMap.set(`${r.empId}_${r.date}`, true);
+      }
+    });
+
     for (let d = 1; d <= daysInMonth; d++) {
       const dateObj = new Date(year, month, d);
       const dateStr = getDateKey(dateObj);
@@ -2439,20 +1749,14 @@ const ShiftScheduler = () => {
 
       teamState.forEach((emp) => {
         const overrideKey = `${emp.id}_${dateStr}`;
-        let shift: OverrideType;
-        const hasPending = requests.some(
-          (r) =>
-            r.empId === emp.id && r.date === dateStr && r.status === "PENDING"
-        );
-        pendingReqs[emp.id] = hasPending;
+
+        // Use pre-computed map for faster lookup
+        pendingReqs[emp.id] = pendingRequestsMap.get(overrideKey) || false;
 
         // Default to day off unless manually overridden
-        if (effectiveOverrides[overrideKey]) {
-          shift = effectiveOverrides[overrideKey];
-        } else {
-          shift = "F"; // Default to day off - manual scheduling only
-        }
+        const shift = effectiveOverrides[overrideKey] || "F";
         shifts[emp.id] = shift;
+
         if (["M", "T", "N"].includes(shift)) {
           emp.languages.forEach((lang) =>
             coverage[shift as "M" | "T" | "N"].add(lang)
@@ -2588,26 +1892,81 @@ const ShiftScheduler = () => {
     nextMonthExtraDays,
   ]);
 
+  // Auto-scroll to current date on mount
+  useEffect(() => {
+    const scrollToToday = () => {
+      const el = calendarRef.current;
+      if (!el) return;
+
+      const today = new Date();
+      const todayStr = `${today.getFullYear()}-${String(
+        today.getMonth() + 1
+      ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+      const todayIndex = calendarData.findIndex((d) => d.fullDate === todayStr);
+
+      if (todayIndex >= 0) {
+        setTimeout(() => {
+          const ths = el.querySelectorAll("table thead th");
+          const dayThs = Array.from(ths).slice(1) as HTMLElement[];
+          const todayTh = dayThs[todayIndex];
+          if (todayTh) {
+            const stickyWidth = (ths[0] as HTMLElement)?.offsetWidth || 0;
+            el.scrollLeft = todayTh.offsetLeft - stickyWidth - 100;
+          }
+        }, 100);
+      }
+    };
+
+    scrollToToday();
+  }, [calendarData]);
+
   // Auto-append next-month days when user scrolls to right edge of calendar
   useEffect(() => {
     const el = calendarRef.current;
     if (!el) return;
 
     let ticking = false;
+    let lastScrollLeft = el.scrollLeft;
+    let lastScrollTop = el.scrollTop;
+
     const onScroll = () => {
       if (ticking) return;
       ticking = true;
       requestAnimationFrame(() => {
         try {
-          const threshold = 40;
-          if (el.scrollLeft + el.clientWidth >= el.scrollWidth - threshold) {
-            const now = Date.now();
-            if (now - lastAutoRef.current > 900) {
-              lastAutoRef.current = now;
-              // Append 11 days by default so user can view end of month + early next month
-              setNextMonthExtraDays(11);
+          const currentScrollLeft = el.scrollLeft;
+          const currentScrollTop = el.scrollTop;
+
+          // Only trigger if horizontal scroll changed (not just vertical)
+          const horizontalScrollDelta = Math.abs(
+            currentScrollLeft - lastScrollLeft
+          );
+          const verticalScrollDelta = Math.abs(
+            currentScrollTop - lastScrollTop
+          );
+
+          // Only proceed if horizontal scroll is significant and greater than vertical
+          if (
+            horizontalScrollDelta > 5 &&
+            horizontalScrollDelta > verticalScrollDelta
+          ) {
+            const threshold = 40;
+            // Only auto-append if we're actually near the end AND haven't appended yet
+            if (
+              el.scrollLeft + el.clientWidth >= el.scrollWidth - threshold &&
+              nextMonthExtraDays === 0
+            ) {
+              const now = Date.now();
+              if (now - lastAutoRef.current > 900) {
+                lastAutoRef.current = now;
+                // Append 7 days by default (just one more week)
+                setNextMonthExtraDays(7);
+              }
             }
           }
+
+          lastScrollLeft = currentScrollLeft;
+          lastScrollTop = currentScrollTop;
         } finally {
           ticking = false;
         }
@@ -2616,7 +1975,7 @@ const ShiftScheduler = () => {
 
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll as any);
-  }, [calendarRef, currentDate, teamState]);
+  }, [calendarRef, currentDate, teamState, nextMonthExtraDays]);
 
   // Auto-detect visible month and append next-month days when user stops scrolling
   useEffect(() => {
@@ -2652,26 +2011,22 @@ const ShiftScheduler = () => {
       );
       const lastIndexOfCurrent = daysInCurrent - 1;
 
-      // If user is viewing near the end of current month, append next month (but don't remove once added)
-      if (lastVisibleIdx >= lastIndexOfCurrent - 3 && !hasAppendedRef.current) {
+      // Only append if user scrolled (not if they just changed months)
+      // Check if we're past a minimum scroll position to avoid auto-append on month change
+      const minScrollForAppend = 100; // Only append if user scrolled at least 100px
+      if (
+        lastVisibleIdx >= lastIndexOfCurrent - 3 &&
+        nextMonthExtraDays === 0 &&
+        el.scrollLeft > minScrollForAppend
+      ) {
         // Save scroll position before state change
         savedScrollRef.current = el.scrollLeft;
-
-        const nextMonthDate = new Date(
-          currentDate.getFullYear(),
-          currentDate.getMonth() + 1,
-          1
-        );
-        const daysInNext = getDaysInMonth(
-          nextMonthDate.getFullYear(),
-          nextMonthDate.getMonth()
-        );
         hasAppendedRef.current = true;
-        setNextMonthExtraDays(daysInNext);
+        setNextMonthExtraDays(7);
       }
 
-      // Update header based on what's visible
-      if (lastVisibleIdx >= lastIndexOfCurrent) {
+      // Update header based on what's visible - but only if we have extra days appended
+      if (lastVisibleIdx >= lastIndexOfCurrent && nextMonthExtraDays > 0) {
         const nextMonthDate = new Date(
           currentDate.getFullYear(),
           currentDate.getMonth() + 1,
@@ -2698,7 +2053,7 @@ const ShiftScheduler = () => {
       el.removeEventListener("scroll", onScroll as any);
       if (scrollTimeout) window.clearTimeout(scrollTimeout);
     };
-  }, [calendarRef, currentDate]);
+  }, [calendarRef, currentDate, nextMonthExtraDays]);
 
   // Restore scroll position after appending days
   useEffect(() => {
@@ -2755,6 +2110,7 @@ const ShiftScheduler = () => {
   const handlePrevMonth = () => {
     setNextMonthExtraDays(0);
     hasAppendedRef.current = false;
+    lastAutoRef.current = 0;
     const nd = new Date(
       currentDate.getFullYear(),
       currentDate.getMonth() - 1,
@@ -2767,6 +2123,7 @@ const ShiftScheduler = () => {
   const handleNextMonth = () => {
     setNextMonthExtraDays(0);
     hasAppendedRef.current = false;
+    lastAutoRef.current = 0;
     const nd = new Date(
       currentDate.getFullYear(),
       currentDate.getMonth() + 1,
@@ -2966,19 +2323,27 @@ const ShiftScheduler = () => {
     [teamState]
   );
   const pendingCount = requests.filter((r) => r.status === "PENDING").length;
+  const calendarHeight =
+    currentUser.role === "editor"
+      ? "calc(100vh - 140px)"
+      : "calc(100vh - 140px)";
 
+  // Show error screen only if truly critical (not just offline mode)
   if (initError) {
     return (
       <div className="h-screen w-full flex flex-col items-center justify-center bg-red-50 text-red-900 p-4 text-center">
         <ShieldAlert className="w-16 h-16 text-red-600 mb-4" />
-        <h2 className="text-2xl font-bold mb-2">Erro de Sincronização</h2>
-        <p className="max-w-md mb-6">
-          Não foi possível carregar os dados mais recentes da Cloud. Para
-          proteger o horário de ser apagado, o modo de edição foi bloqueado.
+        <h2 className="text-2xl font-bold mb-2">Erro Crítico</h2>
+        <p className="max-w-md mb-2 text-sm">
+          Houve um erro ao inicializar a aplicação.
+        </p>
+        <p className="max-w-md mb-6 text-sm text-red-800">
+          Por favor, verifique a sua conexão de internet e as credenciais do
+          Firebase no arquivo .env
         </p>
         <button
           onClick={() => window.location.reload()}
-          className="px-6 py-3 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 shadow-lg flex items-center gap-2"
+          className="px-6 py-3 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 shadow-lg flex items-center justify-center gap-2"
         >
           <RefreshCw size={20} /> Tentar Novamente
         </button>
@@ -2996,7 +2361,7 @@ const ShiftScheduler = () => {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50 text-sm font-sans relative overflow-hidden print:overflow-visible print:bg-white print:h-auto">
+    <div className="flex flex-col h-screen bg-gray-50 text-xs sm:text-sm md:text-sm font-sans relative print:overflow-visible print:bg-white print:h-auto">
       <style>{`
         @media print { 
           @page { size: landscape; margin: 10mm; } 
@@ -3033,6 +2398,9 @@ const ShiftScheduler = () => {
                   {role.id === "viewer" && <Eye size={12} />}
                   {role.id === "editor" && <Edit3 size={12} />}
                   {role.id === "manager" && <Shield size={12} />}
+                  {role.id === "admin" && (
+                    <Shield size={12} className="text-red-400" />
+                  )}
                   {role.label}
                 </button>
               );
@@ -3043,24 +2411,45 @@ const ShiftScheduler = () => {
         <div className="flex items-center gap-4">
           {/* Cloud Status */}
           <div
-            className={`flex items-center gap-2 text-xs px-3 py-1 rounded-full border ${
+            className={`flex items-center gap-2 text-xs px-3 py-1 rounded-full border transition-colors ${
               saveStatus === "saved"
                 ? "bg-green-900/30 border-green-700 text-green-300"
                 : saveStatus === "saving"
                 ? "bg-yellow-900/30 border-yellow-700 text-yellow-300"
+                : saveStatus === "offline"
+                ? "bg-orange-900/30 border-orange-700 text-orange-300 hover:bg-orange-900/50 cursor-help"
                 : "bg-red-900/30 border-red-700 text-red-300"
             }`}
+            title={
+              saveStatus === "offline"
+                ? "Clique para tentar reconectar"
+                : undefined
+            }
+            onClick={
+              saveStatus === "offline"
+                ? () => {
+                    console.log("[User Action] Attempting manual reconnection");
+                    window.location.reload();
+                  }
+                : undefined
+            }
           >
             {saveStatus === "saved" && <Cloud size={14} />}
             {saveStatus === "saving" && (
               <RefreshCw size={14} className="animate-spin" />
             )}
-            {saveStatus === "error" && <CloudOff size={14} />}
-            {saveStatus === "saved"
-              ? t.saved
-              : saveStatus === "saving"
-              ? t.saving
-              : t.offline}
+            {(saveStatus === "error" || saveStatus === "offline") && (
+              <CloudOff size={14} />
+            )}
+            <span className="font-medium">
+              {saveStatus === "saved"
+                ? t.saved
+                : saveStatus === "saving"
+                ? t.saving
+                : saveStatus === "offline"
+                ? "Offline"
+                : t.offline}
+            </span>
           </div>
 
           {loggedInName && (
@@ -3069,6 +2458,19 @@ const ShiftScheduler = () => {
               <span className="font-bold text-white">{loggedInName}</span>
             </div>
           )}
+
+          {/* Debug Button */}
+          <button
+            onClick={() => setShowDebugPanel(!showDebugPanel)}
+            className={`p-1.5 rounded transition-colors ${
+              showDebugPanel
+                ? "bg-purple-600/30 border border-purple-500 text-purple-300"
+                : "text-slate-400 hover:bg-slate-800 hover:text-purple-400"
+            }`}
+            title="Toggle debug console"
+          >
+            <Terminal size={16} />
+          </button>
         </div>
       </div>
 
@@ -3078,7 +2480,7 @@ const ShiftScheduler = () => {
         targetRole={targetRole}
         team={teamState}
         onLoginSuccess={handleLoginSuccess}
-        onPasswordUpdate={handlePasswordUpdate}
+        onTeamUpdate={setTeamState}
         t={t}
       />
 
@@ -3100,6 +2502,44 @@ const ShiftScheduler = () => {
         preSelectedId={preSelectedBulkId}
         onApply={handleBulkApply}
       />
+
+      {/* Debug Panel */}
+      {showDebugPanel && (
+        <div className="fixed bottom-4 right-4 w-96 max-h-64 bg-slate-900 text-slate-100 rounded-lg shadow-2xl border border-purple-600/50 z-40 flex flex-col overflow-hidden print:hidden">
+          <div className="flex justify-between items-center p-3 border-b border-slate-700 bg-slate-950">
+            <span className="text-sm font-bold text-purple-400 flex items-center gap-2">
+              <Terminal size={14} /> Debug Console
+            </span>
+            <button
+              onClick={() => setShowDebugPanel(false)}
+              className="p-1 hover:bg-slate-800 rounded"
+            >
+              <X size={14} />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-2 space-y-1 text-[10px] font-mono">
+            <div className="text-slate-400">
+              • App Status:{" "}
+              {saveStatus === "offline" ? "🔴 Offline" : "🟢 Online"}
+            </div>
+            <div className="text-slate-400">
+              • Firebase Project: {FIREBASE_CONFIG.projectId}
+            </div>
+            <div className="text-slate-400">
+              • Current Role: {currentUser.label}
+            </div>
+            <div className="text-slate-400">
+              • Team Size: {teamState.length}
+            </div>
+            <div className="text-slate-400 mt-2 border-t border-slate-700 pt-2">
+              💡 Tip: Open browser console (F12) for detailed Firebase logs
+            </div>
+            <div className="text-slate-400 mt-1">
+              🔄 Click the offline indicator to try reconnecting
+            </div>
+          </div>
+        </div>
+      )}
 
       {editingCell && (
         <CellEditor
@@ -3128,38 +2568,25 @@ const ShiftScheduler = () => {
       />
 
       {/* Header */}
-      <div className="bg-white border-b flex flex-col shadow-sm sticky top-0 z-20 print:hidden">
+      <div className="bg-white border-b flex flex-col shadow-sm z-20 print:hidden flex-shrink-0">
         {/* Top Row: Title & Actions */}
-        <div className="px-6 py-3 flex items-center justify-between">
+        <div className="px-2 sm:px-3 md:px-4 py-0.5 md:py-1 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 md:gap-0">
           <div>
-            <h1 className="text-xl font-bold text-gray-800">{t.title}</h1>
-            <div className="flex items-center gap-2 text-xs text-gray-500">
-              <span>
-                {t.start}: {startDateStr}
-              </span>
-              <span className="text-gray-300">|</span>
-              <span>
-                {t.pattern}: {config.morningDays}M-
-                {config.morningDays < 5 ? 1 : 2}F-{config.afternoonDays}T-
-                {config.afternoonDays < 5 ? 1 : 2}F-{config.nightDays}N-
-                {config.nightOffs === 3 ? "2/3" : config.nightOffs}F
-              </span>
-              <span className="text-gray-300">|</span>
-              <span className="text-blue-600 italic">
-                💡 {t.selectMultiple}
-              </span>
-            </div>
+            <h1 className="text-xs sm:text-sm md:text-base font-bold text-gray-800">
+              {t.title}
+            </h1>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-0.5 sm:space-x-1 md:space-x-1 flex-wrap gap-0.5 md:gap-0 w-full sm:w-auto">
             {/* MANAGER INBOX BUTTON */}
             {isManager && (
               <button
                 onClick={() => setShowRequests(true)}
-                className="flex items-center px-3 py-2 bg-orange-50 text-orange-700 rounded hover:bg-orange-100 transition border border-orange-200 relative mr-2"
+                className="flex items-center px-1.5 sm:px-2 py-1 sm:py-1.5 bg-orange-50 text-orange-700 rounded hover:bg-orange-100 transition border border-orange-200 relative text-xs sm:text-sm"
                 title={t.requests}
               >
-                <Inbox size={16} className="mr-2" />
-                Requests
+                <Inbox size={14} className="sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+                <span className="hidden sm:inline">Requests</span>
+                <span className="sm:hidden">Req</span>
                 {pendingCount > 0 && (
                   <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[10px] font-bold border-2 border-white animate-pulse">
                     {pendingCount}
@@ -3172,14 +2599,17 @@ const ShiftScheduler = () => {
             {canWrite && (
               <button
                 onClick={() => {
-                  setPreSelectedBulkId("");
+                  setPreSelectedBulkId(
+                    currentUser.role === "editor" ? String(loggedInUserId) : ""
+                  );
                   setShowBulkModal(true);
                 }}
-                className="flex items-center px-3 py-2 bg-purple-50 text-purple-700 rounded hover:bg-purple-100 transition border border-purple-200 mr-2"
+                className="flex items-center px-2 sm:px-3 py-1.5 sm:py-2 bg-purple-50 text-purple-700 rounded hover:bg-purple-100 transition border border-purple-200 text-xs sm:text-sm"
                 title={t.bulkTitle}
               >
-                <Layers size={16} className="mr-2" />
-                {t.bulkActions}
+                <Layers size={14} className="sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+                <span className="hidden sm:inline">{t.bulkActions}</span>
+                <span className="sm:hidden">Bulk</span>
               </button>
             )}
 
@@ -3313,15 +2743,28 @@ const ShiftScheduler = () => {
                 <Lock size={16} className="mr-2" /> {t.config}
               </div>
             )}
+
+            {currentUser.permissions.includes("system") ? (
+              <button
+                onClick={() => setShowAdmin(!showAdmin)}
+                className={`flex items-center px-3 py-2 rounded transition ${
+                  showAdmin
+                    ? "bg-red-100 text-red-800"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                <Shield size={16} className="mr-2" /> Admin
+              </button>
+            ) : null}
           </div>
         </div>
 
         {/* Bottom Row: Filters & Nav */}
-        <div className="px-6 py-2 bg-gray-50 border-t flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 text-xs text-gray-600">
-              <Filter size={14} />
-              <span className="font-bold">{t.filters}:</span>
+        <div className="px-2 sm:px-3 md:px-4 py-0.5 bg-gray-50 border-t flex flex-col md:flex-row justify-between items-start md:items-center gap-0.5 md:gap-0 overflow-x-auto">
+          <div className="flex items-center gap-2 md:gap-4 flex-wrap text-[10px] md:text-xs">
+            <div className="flex items-center gap-1 md:gap-2 hidden sm:flex">
+              <Filter size={12} className="md:w-4 md:h-4" />
+              <span className="font-bold hidden md:inline">{t.filters}:</span>
             </div>
             {/* Role radio group */}
             <div className="flex items-center gap-2">
@@ -3591,7 +3034,9 @@ const ShiftScheduler = () => {
       </div>
 
       {/* Content */}
-      <div className="flex flex-1 overflow-hidden print:overflow-visible">
+      <div className="flex flex-col md:flex-row flex-1 min-h-0 print:overflow-visible">
+        <AdminPanel show={showAdmin} team={teamState} setTeam={setTeamState} />
+
         <ConfigPanel
           show={showConfig}
           config={config}
@@ -3620,7 +3065,12 @@ const ShiftScheduler = () => {
 
         <div
           ref={calendarRef}
-          className="flex-1 overflow-auto print:overflow-visible"
+          className="w-full overflow-auto print:overflow-visible"
+          style={{
+            height: calendarHeight,
+            minHeight: calendarHeight,
+            maxHeight: calendarHeight,
+          }}
         >
           <div className="hidden print:block mb-4">
             <h1 className="text-2xl font-bold">
@@ -3631,11 +3081,11 @@ const ShiftScheduler = () => {
             </p>
           </div>
 
-          <table className="w-full border-collapse text-xs print:text-[8px]">
+          <table className="w-full h-full border-collapse text-[10px] sm:text-xs print:text-[8px]">
             <thead className="bg-gray-100 sticky top-0 z-10 shadow-sm print:static">
               <tr>
-                <th className="p-3 text-left border-b border-r min-w-[200px] bg-gray-50 sticky left-0 z-20 shadow-sm print:static print:bg-white print:border-black">
-                  <div className="flex items-center gap-2">
+                <th className="p-1 md:p-1.5 text-left border-b border-r min-w-[140px] md:min-w-[200px] bg-gray-50 sticky left-0 z-20 shadow-sm print:static print:bg-white print:border-black">
+                  <div className="flex items-center gap-1 md:gap-2">
                     {t.colaborador}
                     {sortOrder === "AZ" && (
                       <ArrowDownAZ
@@ -3674,9 +3124,17 @@ const ShiftScheduler = () => {
                   const isWeekWithShift = weeksWithShifts.has(weekStart);
                   const isFocused = focusedDate === day.fullDate;
                   const isSelected = selectedDates.includes(day.fullDate);
+                  const today = new Date();
+                  const todayStr = `${today.getFullYear()}-${String(
+                    today.getMonth() + 1
+                  ).padStart(2, "0")}-${String(today.getDate()).padStart(
+                    2,
+                    "0"
+                  )}`;
+                  const isToday = day.fullDate === todayStr;
                   return (
                     <th
-                      key={day.date}
+                      key={day.fullDate}
                       onClick={(e) => {
                         if (e.shiftKey && lastSelectedDate) {
                           // Range selection with Shift
@@ -3726,18 +3184,20 @@ const ShiftScheduler = () => {
                           setFocusedDate(null);
                         }
                       }}
-                      className={`p-1 border-b min-w-[30px] text-center relative cursor-pointer transition-all ${
+                      className={`p-0 md:p-0.5 border-b min-w-[24px] md:min-w-[30px] text-center relative cursor-pointer transition-all ${
                         !isWeekWithShift ? "no-shift-week" : ""
                       } ${
-                        isSelected
-                          ? "bg-blue-200 border-l-4 border-r-4 border-t-4 border-blue-500 z-30"
+                        isToday
+                          ? "bg-green-200 ring-2 md:ring-4 ring-green-500 ring-inset font-bold z-40 print:bg-green-200"
+                          : isSelected
+                          ? "bg-blue-200 border-l-2 md:border-l-4 border-r-2 md:border-r-4 border-t-2 md:border-t-4 border-blue-500 z-30"
                           : isFocused
-                          ? "bg-yellow-100 border-l-4 border-r-4 border-t-4 border-yellow-500 z-30"
+                          ? "bg-yellow-100 border-l-2 md:border-l-4 border-r-2 md:border-r-4 border-t-2 md:border-t-4 border-yellow-500 z-30"
                           : day.isWeekend
                           ? "bg-indigo-50 print:bg-gray-100 border-r"
                           : "border-r"
                       } ${
-                        day.isPtHoliday && !isFocused && !isSelected
+                        day.isPtHoliday && !isFocused && !isSelected && !isToday
                           ? "bg-red-50 print:bg-gray-200"
                           : ""
                       } print:border-black hover:bg-gray-200`}
@@ -3747,7 +3207,7 @@ const ShiftScheduler = () => {
                           : "Click to focus, Ctrl+Click to add, Shift+Click for range"
                       }
                     >
-                      <div className="text-xs font-bold text-gray-700 print:text-black">
+                      <div className="text-[10px] md:text-xs font-bold text-gray-700 print:text-black">
                         {day.date}
                       </div>
                       <div className="text-[9px] text-gray-500 uppercase print:text-black">
@@ -3780,15 +3240,15 @@ const ShiftScheduler = () => {
                       onClick={() =>
                         setFocusedEmployeeId(isFocusedRow ? null : emp.id)
                       }
-                      className={`p-2 border-b bg-white sticky left-0 z-10 shadow-sm print:static print:border-black print:shadow-none group cursor-pointer ${
+                      className={`p-0 md:p-0.5 border-b bg-white sticky left-0 z-10 shadow-sm print:static print:border-black print:shadow-none group cursor-pointer ${
                         isFocusedRow
-                          ? "border-l-4 border-t-4 border-b-4 border-yellow-500 bg-yellow-50"
+                          ? "border-l-2 md:border-l-4 border-t-2 md:border-t-4 border-b-2 md:border-b-4 border-yellow-500 bg-yellow-50"
                           : "border-r"
                       }`}
                       title="Click to focus this employee"
                     >
                       <div className="flex justify-between items-center">
-                        <div className="font-bold text-gray-800 print:text-black">
+                        <div className="font-bold text-[10px] md:text-xs text-gray-800 print:text-black">
                           {emp.name}
                         </div>
 
@@ -3799,10 +3259,13 @@ const ShiftScheduler = () => {
                               setPreSelectedBulkId(String(emp.id));
                               setShowBulkModal(true);
                             }}
-                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-100 rounded text-gray-500 print:hidden transition-opacity"
+                            className="opacity-0 group-hover:opacity-100 p-0.5 md:p-1 hover:bg-gray-100 rounded text-gray-500 print:hidden transition-opacity"
                             title={t.bulkActions}
                           >
-                            <MoreHorizontal size={14} />
+                            <MoreHorizontal
+                              size={12}
+                              className="md:w-4 md:h-4"
+                            />
                           </button>
                         )}
                       </div>
@@ -3824,6 +3287,14 @@ const ShiftScheduler = () => {
                       const weekStart = dIdx - (dIdx % 7);
                       const isWeekWithShift = weeksWithShifts.has(weekStart);
                       const isFocused = focusedDate === day.fullDate;
+                      const today = new Date();
+                      const todayStr = `${today.getFullYear()}-${String(
+                        today.getMonth() + 1
+                      ).padStart(2, "0")}-${String(today.getDate()).padStart(
+                        2,
+                        "0"
+                      )}`;
+                      const isToday = day.fullDate === todayStr;
                       const isLastCell = dIdx === calendarData.length - 1;
                       const isRestViolation =
                         dIdx > 0 &&
@@ -3843,7 +3314,7 @@ const ShiftScheduler = () => {
 
                       return (
                         <td
-                          key={day.date}
+                          key={day.fullDate}
                           onClick={(e) =>
                             handleCellClick(e, emp.id, day.fullDate, emp.name)
                           }
@@ -3851,7 +3322,9 @@ const ShiftScheduler = () => {
                             border-b p-0.5 text-center transition print:cursor-default relative
                             ${!isWeekWithShift ? "no-shift-week" : ""}
                             ${
-                              isSelected
+                              isToday
+                                ? "bg-green-100 border-l-4 border-r-4 border-green-500"
+                                : isSelected
                                 ? "bg-blue-100 border-l-4 border-r-4 border-blue-500"
                                 : isBothFocused
                                 ? "bg-yellow-100 border-l-4 border-r-4 border-t-4 border-b-4 border-yellow-500"
@@ -3876,7 +3349,7 @@ const ShiftScheduler = () => {
                               );
                             }}
                             className={`
-                              w-full h-8 rounded flex items-center justify-center text-xs font-bold shadow-sm print:shadow-none print:rounded-none border
+                              w-full h-5 rounded flex items-center justify-center text-[10px] md:text-xs font-bold shadow-sm print:shadow-none print:rounded-none border
                               ${
                                 shiftOverflowInfo.hasShiftOverflow
                                   ? "ring-2 ring-red-500 z-10"
