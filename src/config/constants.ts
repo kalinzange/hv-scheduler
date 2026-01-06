@@ -100,7 +100,6 @@ export const INITIAL_TEAM: Employee[] = [
     name: "Huyesin Gozcu",
     role: "GCC",
     languages: ["EN", "TR", "PT"],
-    offset: 0,
     password: "1234",
   },
   {
@@ -108,7 +107,6 @@ export const INITIAL_TEAM: Employee[] = [
     name: "Lourdes Gutierrez",
     role: "GCC",
     languages: ["EN", "ES", "PT"],
-    offset: 2,
     password: "1234",
   },
   {
@@ -116,7 +114,6 @@ export const INITIAL_TEAM: Employee[] = [
     name: "Sergio Ribeiro",
     role: "TL",
     languages: ["EN", "FR", "PT"],
-    offset: 4,
     password: "1234",
   },
   {
@@ -124,7 +121,6 @@ export const INITIAL_TEAM: Employee[] = [
     name: "Filipe Cardoso",
     role: "TL",
     languages: ["EN", "FR", "PT"],
-    offset: 6,
     password: "1234",
   },
   {
@@ -132,7 +128,6 @@ export const INITIAL_TEAM: Employee[] = [
     name: "Joao Monteiro",
     role: "GCC",
     languages: ["EN", "PT"],
-    offset: 8,
     password: "1234",
   },
   {
@@ -140,7 +135,6 @@ export const INITIAL_TEAM: Employee[] = [
     name: "Juliana Andrade",
     role: "GCC",
     languages: ["EN", "PT"],
-    offset: 10,
     password: "1234",
   },
   {
@@ -148,7 +142,6 @@ export const INITIAL_TEAM: Employee[] = [
     name: "Rita Quaresma",
     role: "GCC",
     languages: ["EN", "PT", "ES"],
-    offset: 12,
     password: "1234",
   },
   {
@@ -156,7 +149,6 @@ export const INITIAL_TEAM: Employee[] = [
     name: "Hugo Rodrigues",
     role: "GCC",
     languages: ["EN", "PT"],
-    offset: 14,
     password: "1234",
   },
   {
@@ -164,7 +156,6 @@ export const INITIAL_TEAM: Employee[] = [
     name: "Miguel Geada",
     role: "GCC",
     languages: ["EN", "PT"],
-    offset: 16,
     password: "1234",
   },
   {
@@ -172,7 +163,6 @@ export const INITIAL_TEAM: Employee[] = [
     name: "Lucas Alves",
     role: "GCC",
     languages: ["EN", "PT"],
-    offset: 18,
     password: "1234",
   },
 ];

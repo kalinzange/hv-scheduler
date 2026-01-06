@@ -22,8 +22,6 @@ export interface Employee {
   name: string;
   role: string;
   languages: Language[];
-  offset: number;
-  rotationMode?: RotationMode;
   password?: string;
   requirePasswordChange?: boolean;
 }

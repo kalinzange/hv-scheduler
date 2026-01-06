@@ -501,8 +501,6 @@ const CellEditor = ({
 
 const ConfigPanel = ({
   show,
-  config,
-  setConfig,
   startDateStr,
   setStartDateStr,
   team,
@@ -517,6 +515,10 @@ const ConfigPanel = ({
   setLegends,
   colors,
   setColors,
+  customShifts,
+  setCustomShifts,
+  customAbsenceReasons,
+  setCustomAbsenceReasons,
   weekendDays,
   setWeekendDays,
   lang,
@@ -527,6 +529,8 @@ const ConfigPanel = ({
   if (!show) return null;
   const t = TRANSLATIONS[lang as LangCode];
   const [newHoliday, setNewHoliday] = useState("");
+  const [newShift, setNewShift] = useState("");
+  const [newAbsenceReason, setNewAbsenceReason] = useState("");
 
   const handleAddHoliday = () => {
     if (newHoliday && !holidays.includes(newHoliday)) {
@@ -556,13 +560,34 @@ const ConfigPanel = ({
   };
 
   const handleLangChange = (empId: number, langStr: string) => {
-    const langs = langStr
-      .toUpperCase()
-      .split(",")
-      .map((l) => l.trim() as Language)
-      .filter((l) => l);
+    const upper = langStr.toUpperCase().trim();
+    let langs: Language[] = [];
+
+    if (!upper) {
+      // Empty input
+      langs = [];
+    } else if (upper.includes(",") || upper.includes(" ")) {
+      // Handle comma-separated and/or space-separated input
+      langs = upper
+        .split(/[,\s]+/) // Split by comma and/or spaces
+        .map((l) => l.trim())
+        .filter((l) => l && l.length === 2) as Language[]; // Only keep 2-letter codes
+    } else {
+      // Handle concatenated input like "ENPTIT" - split into 2-character chunks
+      for (let i = 0; i < upper.length; i += 2) {
+        const chunk = upper.substring(i, i + 2);
+        if (chunk.length === 2) {
+          langs.push(chunk as Language);
+        }
+      }
+    }
+
+    // Filter to only valid languages
+    const validLangs = langs.filter((l) => ALL_LANGUAGES.includes(l));
     setTeam(
-      team.map((t: any) => (t.id === empId ? { ...t, languages: langs } : t))
+      team.map((t: any) =>
+        t.id === empId ? { ...t, languages: validLangs } : t
+      )
     );
   };
 
@@ -575,9 +600,7 @@ const ConfigPanel = ({
       name: "Novo Colaborador",
       role: "GCC",
       languages: ["EN"],
-      offset: 0,
       password: "1234",
-      rotationMode: "STANDARD",
     };
     setTeam([...team, newEmp]);
   };
@@ -587,8 +610,6 @@ const ConfigPanel = ({
       setTeam(team.filter((e: any) => e.id !== id));
     }
   };
-
-  const getAutoOffs = (days: number) => (days < 5 ? 1 : 2);
 
   return (
     <div className="w-96 bg-white border-r overflow-y-auto p-4 shadow-inner z-10 animate-slide-in flex flex-col h-full print:hidden">
@@ -645,79 +666,6 @@ const ConfigPanel = ({
                 </button>
               </div>
             ))}
-          </div>
-        </div>
-      </div>
-
-      {/* ... existing Rotation Pattern section ... */}
-      <div className="bg-gray-50 p-3 rounded mb-4 border space-y-3">
-        <h4 className="text-xs font-bold text-gray-500 uppercase">
-          {t.rotationPattern}
-        </h4>
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="block text-[10px] text-gray-600">{t.daysM}</label>
-            <input
-              type="number"
-              value={config.morningDays}
-              onChange={(e) =>
-                setConfig({ ...config, morningDays: +e.target.value })
-              }
-              className="w-full p-1 border rounded"
-            />
-          </div>
-          <div>
-            <label className="block text-[10px] text-gray-600">{t.offsM}</label>
-            <input
-              type="text"
-              value={getAutoOffs(config.morningDays)}
-              disabled
-              className="w-full p-1 border rounded bg-gray-100 text-gray-500 text-center font-bold"
-            />
-          </div>
-          <div>
-            <label className="block text-[10px] text-gray-600">{t.daysT}</label>
-            <input
-              type="number"
-              value={config.afternoonDays}
-              onChange={(e) =>
-                setConfig({ ...config, afternoonDays: +e.target.value })
-              }
-              className="w-full p-1 border rounded"
-            />
-          </div>
-          <div>
-            <label className="block text-[10px] text-gray-600">{t.offsT}</label>
-            <input
-              type="text"
-              value={getAutoOffs(config.afternoonDays)}
-              disabled
-              className="w-full p-1 border rounded bg-gray-100 text-gray-500 text-center font-bold"
-            />
-          </div>
-          <div>
-            <label className="block text-[10px] text-gray-600">{t.daysN}</label>
-            <input
-              type="number"
-              value={config.nightDays}
-              onChange={(e) =>
-                setConfig({ ...config, nightDays: +e.target.value })
-              }
-              className="w-full p-1 border rounded"
-            />
-          </div>
-          <div>
-            <label className="block text-[10px] text-gray-600 font-bold text-indigo-700">
-              {t.offsN}
-            </label>
-            <input
-              type="number"
-              value={config.nightOffs}
-              onChange={(e) =>
-                setConfig({ ...config, nightOffs: +e.target.value })
-              }
-              className="w-full p-1 border rounded bg-white"
-            />
           </div>
         </div>
       </div>
@@ -903,10 +851,118 @@ const ConfigPanel = ({
         </div>
       </div>
 
+      {/* Custom Shifts & Absence Reasons */}
+      <div className="bg-gray-50 p-3 rounded mb-4 border space-y-3">
+        <h4 className="text-xs font-bold text-gray-500 uppercase">
+          Custom Shifts & Absence Reasons
+        </h4>
+
+        {/* Custom Shifts */}
+        <div>
+          <label className="block text-xs font-bold text-gray-600 mb-2">
+            Custom Shifts
+          </label>
+          <div className="flex gap-2 mb-2">
+            <input
+              type="text"
+              value={newShift}
+              onChange={(e) => setNewShift(e.target.value.toUpperCase())}
+              placeholder="e.g., TR (Training)"
+              className="flex-1 p-1 border rounded text-xs"
+              maxLength={2}
+            />
+            <button
+              onClick={() => {
+                if (newShift && !customShifts.includes(newShift)) {
+                  setCustomShifts([...customShifts, newShift]);
+                  setNewShift("");
+                }
+              }}
+              className="bg-indigo-100 text-indigo-700 px-2 rounded hover:bg-indigo-200"
+            >
+              <Plus size={14} />
+            </button>
+          </div>
+          <div className="max-h-24 overflow-y-auto space-y-1">
+            {customShifts.map((shift: string) => (
+              <div
+                key={shift}
+                className="flex justify-between items-center bg-white border px-2 py-1 rounded text-xs"
+              >
+                <span className="font-bold">{shift}</span>
+                <button
+                  onClick={() =>
+                    setCustomShifts(
+                      customShifts.filter((s: string) => s !== shift)
+                    )
+                  }
+                  className="text-red-400 hover:text-red-600"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Absence Reasons */}
+        <div className="border-t pt-3">
+          <label className="block text-xs font-bold text-gray-600 mb-2">
+            Absence Reasons
+          </label>
+          <div className="flex gap-2 mb-2">
+            <input
+              type="text"
+              value={newAbsenceReason}
+              onChange={(e) => setNewAbsenceReason(e.target.value)}
+              placeholder="e.g., Training"
+              className="flex-1 p-1 border rounded text-xs"
+            />
+            <button
+              onClick={() => {
+                if (
+                  newAbsenceReason &&
+                  !customAbsenceReasons.includes(newAbsenceReason)
+                ) {
+                  setCustomAbsenceReasons([
+                    ...customAbsenceReasons,
+                    newAbsenceReason,
+                  ]);
+                  setNewAbsenceReason("");
+                }
+              }}
+              className="bg-purple-100 text-purple-700 px-2 rounded hover:bg-purple-200"
+            >
+              <Plus size={14} />
+            </button>
+          </div>
+          <div className="max-h-24 overflow-y-auto space-y-1">
+            {customAbsenceReasons.map((reason: string) => (
+              <div
+                key={reason}
+                className="flex justify-between items-center bg-white border px-2 py-1 rounded text-xs"
+              >
+                <span>{reason}</span>
+                <button
+                  onClick={() =>
+                    setCustomAbsenceReasons(
+                      customAbsenceReasons.filter((r: string) => r !== reason)
+                    )
+                  }
+                  className="text-red-400 hover:text-red-600"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div className="flex-1">
         <div className="flex justify-between items-center mb-2">
           <h4 className="text-xs font-bold text-gray-500 uppercase">
-            {t.teamOffsets}
+            {t.teamSettings}
           </h4>
           <button
             onClick={handleAddEmployee}
@@ -937,13 +993,6 @@ const ConfigPanel = ({
                   onChange={(e) => updateEmp(emp.id, "name", e.target.value)}
                   placeholder="Nome"
                 />
-                <input
-                  className="w-10 text-center border rounded bg-gray-50"
-                  title={t.offset}
-                  type="number"
-                  value={emp.offset}
-                  onChange={(e) => updateEmp(emp.id, "offset", +e.target.value)}
-                />
               </div>
               <div className="mb-2 space-y-2">
                 <div className="grid grid-cols-2 gap-2">
@@ -960,18 +1009,6 @@ const ConfigPanel = ({
                     placeholder="Línguas (ex: EN, PT)"
                   />
                 </div>
-                <select
-                  value={emp.rotationMode || "STANDARD"}
-                  onChange={(e) =>
-                    updateEmp(emp.id, "rotationMode", e.target.value)
-                  }
-                  className="w-full border p-1 rounded bg-gray-50"
-                >
-                  <option value="STANDARD">{t.modeStandard}</option>
-                  <option value="FIXED_M">{t.modeFixedM}</option>
-                  <option value="FIXED_T">{t.modeFixedT}</option>
-                  <option value="FIXED_N">{t.modeFixedN}</option>
-                </select>
               </div>
             </div>
           ))}
@@ -1078,6 +1115,10 @@ const ShiftScheduler = () => {
     V: "#fbcfe8",
     S: "#e5e7eb",
   });
+  const [customShifts, setCustomShifts] = useState<string[]>([]);
+  const [customAbsenceReasons, setCustomAbsenceReasons] = useState<string[]>(
+    []
+  );
   const [overrides, setOverrides] = useState<Record<string, OverrideType>>({});
   const [undoHistory, setUndoHistory] = useState<
     Record<string, OverrideType>[]
@@ -1195,6 +1236,9 @@ const ShiftScheduler = () => {
               if (data.weekendDays) setWeekendDays(data.weekendDays);
               if (data.legends) setLegends(data.legends);
               if (data.colors) setColors(data.colors);
+              if (data.customShifts) setCustomShifts(data.customShifts);
+              if (data.customAbsenceReasons)
+                setCustomAbsenceReasons(data.customAbsenceReasons);
               if (data.config) setConfig(data.config);
               if (data.hoursConfig) setHoursConfig(data.hoursConfig);
               if (data.team) setTeamState(data.team);
@@ -1329,6 +1373,8 @@ const ShiftScheduler = () => {
             weekendDays,
             legends,
             colors,
+            customShifts,
+            customAbsenceReasons,
             overrides,
             publishedOverrides,
             config,
@@ -1358,6 +1404,8 @@ const ShiftScheduler = () => {
     weekendDays,
     legends,
     colors,
+    customShifts,
+    customAbsenceReasons,
     overrides,
     publishedOverrides,
     config,
@@ -1464,6 +1512,8 @@ const ShiftScheduler = () => {
         weekendDays,
         legends,
         colors,
+        customShifts,
+        customAbsenceReasons,
         overrides,
         config,
         hoursConfig,
@@ -1501,6 +1551,9 @@ const ShiftScheduler = () => {
           if (s.weekendDays) setWeekendDays(s.weekendDays);
           if (s.legends) setLegends(s.legends);
           if (s.colors) setColors(s.colors);
+          if (s.customShifts) setCustomShifts(s.customShifts);
+          if (s.customAbsenceReasons)
+            setCustomAbsenceReasons(s.customAbsenceReasons);
 
           if (s.overrides) {
             const normalizedOverrides: Record<string, OverrideType> = {};
@@ -1583,8 +1636,6 @@ const ShiftScheduler = () => {
       );
     } else if (sortOrder === "ROLE") {
       result.sort((a, b) => a.role.localeCompare(b.role));
-    } else {
-      result.sort((a, b) => a.offset - b.offset);
     }
 
     return result;
@@ -3058,6 +3109,10 @@ const ShiftScheduler = () => {
           setLegends={setLegends}
           colors={colors}
           setColors={setColors}
+          customShifts={customShifts}
+          setCustomShifts={setCustomShifts}
+          customAbsenceReasons={customAbsenceReasons}
+          setCustomAbsenceReasons={setCustomAbsenceReasons}
           weekendDays={weekendDays}
           setWeekendDays={setWeekendDays}
           lang={lang}
@@ -3277,12 +3332,6 @@ const ShiftScheduler = () => {
                         <span className="text-indigo-600 font-mono">
                           [{emp.languages.join(" ")}]
                         </span>
-                        {emp.rotationMode &&
-                          emp.rotationMode !== "STANDARD" && (
-                            <span className="text-orange-600 font-bold ml-1">
-                              ({emp.rotationMode.replace("FIXED_", "")})
-                            </span>
-                          )}
                       </div>
                     </td>
                     {calendarData.map((day, dIdx) => {
