@@ -39,7 +39,6 @@ import {
   Loader2,
   Undo,
   Redo,
-  Terminal,
 } from "lucide-react";
 
 // --- FIREBASE IMPORTS ---
@@ -1087,7 +1086,6 @@ const ShiftScheduler = () => {
   >([]);
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [lastSelectedDate, setLastSelectedDate] = useState<string | null>(null);
-  const [showDebugPanel, setShowDebugPanel] = useState(false);
 
   // Track if manager has made changes since last publish
   useEffect(() => {
@@ -1122,10 +1120,11 @@ const ShiftScheduler = () => {
     let isComponentMounted = true;
 
     const initializeFirebase = () => {
-      console.log("[Firebase] Initializing...");
+      if (import.meta.env.DEV) console.log("[Firebase] Initializing...");
 
       if (!FIREBASE_CONFIG.apiKey) {
-        console.warn("[Firebase] Config missing. Running in offline mode.");
+        if (import.meta.env.DEV)
+          console.warn("[Firebase] Config missing. Running in offline mode.");
         if (isComponentMounted) {
           setIsLoading(false);
           setSaveStatus("offline");
@@ -1134,26 +1133,29 @@ const ShiftScheduler = () => {
       }
 
       try {
-        console.log(
-          "[Firebase] Initializing app with project:",
-          FIREBASE_CONFIG.projectId
-        );
+        if (import.meta.env.DEV) {
+          console.log("[Firebase] Initializing app...");
+        }
         const app = initializeApp(FIREBASE_CONFIG);
         const auth = getAuth(app);
         const db = getFirestore(app);
 
         const initAuth = async () => {
           try {
-            console.log("[Firebase] Signing in anonymously...");
+            if (import.meta.env.DEV)
+              console.log("[Firebase] Signing in anonymously...");
             await signInAnonymously(auth);
-            console.log("[Firebase] Anonymous auth successful");
+            if (import.meta.env.DEV)
+              console.log("[Firebase] Anonymous auth successful");
             retryCountRef.current = 0; // Reset retry count on success
           } catch (authError: any) {
-            console.error(
-              "[Firebase] Auth Error:",
-              authError?.code,
-              authError?.message
-            );
+            if (import.meta.env.DEV) {
+              console.error(
+                "[Firebase] Auth Error:",
+                authError?.code,
+                authError?.message
+              );
+            }
             // Retry after delay
             scheduleRetry();
           }
@@ -1170,10 +1172,9 @@ const ShiftScheduler = () => {
           "global_state"
         );
 
-        console.log(
-          "[Firebase] Setting up listener for:",
-          `artifacts/${APP_ID}/public/data/shift_scheduler/global_state`
-        );
+        if (import.meta.env.DEV) {
+          console.log("[Firebase] Setting up listener for global_state");
+        }
 
         unsubscribe = onSnapshot(
           dataDocRef,
@@ -1181,7 +1182,8 @@ const ShiftScheduler = () => {
             if (!isComponentMounted) return;
 
             if (docSnap.exists()) {
-              console.log("[Firebase] Document found. Loading data...");
+              if (import.meta.env.DEV)
+                console.log("[Firebase] Document found. Loading data...");
               // Mark this update as coming from the cloud to prevent immediate re-save
               isRemoteUpdate.current = true;
 
@@ -1211,13 +1213,15 @@ const ShiftScheduler = () => {
               setInitError(false);
               setIsLoading(false);
               setSaveStatus("saved");
-              console.log("[Firebase] Data loaded successfully");
+              if (import.meta.env.DEV)
+                console.log("[Firebase] Data loaded successfully");
               retryCountRef.current = 0; // Reset retry count on success
             } else {
               // Document doesn't exist yet - initialize with defaults
-              console.log(
-                "[Firebase] Document not found. Will use default data."
-              );
+              if (import.meta.env.DEV)
+                console.log(
+                  "[Firebase] Document not found. Will use default data."
+                );
               setInitError(false);
               setIsLoading(false);
               setSaveStatus("saved");
@@ -1227,18 +1231,20 @@ const ShiftScheduler = () => {
           (error: FirestoreError) => {
             if (!isComponentMounted) return;
 
-            console.error("[Firebase] Read Error:", {
-              code: error.code,
-              message: error.message,
-              details: error,
-            });
+            if (import.meta.env.DEV)
+              console.error("[Firebase] Read Error:", {
+                code: error.code,
+                message: error.message,
+                details: error,
+              });
             // Allow offline mode fallback
             setInitError(false);
             setIsLoading(false);
             setSaveStatus("offline");
-            console.warn(
-              "[Firebase] Running in offline mode. Changes will be saved locally."
-            );
+            if (import.meta.env.DEV)
+              console.warn(
+                "[Firebase] Running in offline mode. Changes will be saved locally."
+              );
             // Attempt retry
             scheduleRetry();
           }
@@ -1246,11 +1252,12 @@ const ShiftScheduler = () => {
       } catch (error: any) {
         if (!isComponentMounted) return;
 
-        console.error("[Firebase] Initialization error:", {
-          message: error?.message,
-          code: error?.code,
-          details: error,
-        });
+        if (import.meta.env.DEV)
+          console.error("[Firebase] Initialization error:", {
+            message: error?.message,
+            code: error?.code,
+            details: error,
+          });
         setInitError(false);
         setIsLoading(false);
         setSaveStatus("offline");
@@ -1261,7 +1268,10 @@ const ShiftScheduler = () => {
 
     const scheduleRetry = () => {
       if (retryCountRef.current >= maxRetries) {
-        console.log("[Firebase] Max retries reached. Staying in offline mode.");
+        if (import.meta.env.DEV)
+          console.log(
+            "[Firebase] Max retries reached. Staying in offline mode."
+          );
         return;
       }
 
@@ -1269,16 +1279,18 @@ const ShiftScheduler = () => {
         1000 * Math.pow(2, retryCountRef.current),
         30000
       ); // Exponential backoff, max 30s
-      console.log(
-        `[Firebase] Scheduling reconnection attempt ${
-          retryCountRef.current + 1
-        }/${maxRetries} in ${delayMs}ms...`
-      );
+      if (import.meta.env.DEV)
+        console.log(
+          `[Firebase] Scheduling reconnection attempt ${
+            retryCountRef.current + 1
+          }/${maxRetries} in ${delayMs}ms...`
+        );
       retryCountRef.current++;
 
       retryTimeout = setTimeout(() => {
         if (isComponentMounted) {
-          console.log("[Firebase] Attempting to reconnect...");
+          if (import.meta.env.DEV)
+            console.log("[Firebase] Attempting to reconnect...");
           if (unsubscribe) unsubscribe();
           initializeFirebase();
         }
@@ -1302,6 +1314,11 @@ const ShiftScheduler = () => {
     // If the change came from a remote snapshot, reset the flag and DO NOT save back
     if (isRemoteUpdate.current) {
       isRemoteUpdate.current = false;
+      return;
+    }
+
+    // Only allow saving from roles with write permission
+    if (!canWrite) {
       return;
     }
 
@@ -1339,7 +1356,7 @@ const ShiftScheduler = () => {
           });
           setSaveStatus("saved");
         } catch (err) {
-          console.error("Firebase Save Error:", err);
+          if (import.meta.env.DEV) console.error("Firebase Save Error:", err);
           setSaveStatus("error");
         }
       };
@@ -1347,7 +1364,10 @@ const ShiftScheduler = () => {
       const timer = setTimeout(saveData, 2000);
       return () => clearTimeout(timer);
     } catch (err) {
-      console.error("Firebase not initialized yet, will retry on next change");
+      if (import.meta.env.DEV)
+        console.error(
+          "Firebase not initialized yet, will retry on next change"
+        );
       setSaveStatus("offline");
     }
   }, [
@@ -2308,7 +2328,7 @@ const ShiftScheduler = () => {
           link.click();
           document.body.removeChild(link);
         } catch (err) {
-          console.error("Error exporting image:", err);
+          if (import.meta.env.DEV) console.error("Error exporting image:", err);
           alert("Error exporting image. Please try again.");
         } finally {
           // Clean up the temporary container
@@ -2316,7 +2336,7 @@ const ShiftScheduler = () => {
         }
       }, 100);
     } catch (err) {
-      console.error("Error loading html2canvas:", err);
+      if (import.meta.env.DEV) console.error("Error loading html2canvas:", err);
       alert("Error with export library. Please try again.");
     }
   };
@@ -2431,7 +2451,10 @@ const ShiftScheduler = () => {
             onClick={
               saveStatus === "offline"
                 ? () => {
-                    console.log("[User Action] Attempting manual reconnection");
+                    if (import.meta.env.DEV)
+                      console.log(
+                        "[User Action] Attempting manual reconnection"
+                      );
                     window.location.reload();
                   }
                 : undefined
@@ -2461,19 +2484,6 @@ const ShiftScheduler = () => {
               <span className="font-bold text-white">{loggedInName}</span>
             </div>
           )}
-
-          {/* Debug Button */}
-          <button
-            onClick={() => setShowDebugPanel(!showDebugPanel)}
-            className={`p-1.5 rounded transition-colors ${
-              showDebugPanel
-                ? "bg-purple-600/30 border border-purple-500 text-purple-300"
-                : "text-slate-400 hover:bg-slate-800 hover:text-purple-400"
-            }`}
-            title="Toggle debug console"
-          >
-            <Terminal size={16} />
-          </button>
         </div>
       </div>
 
@@ -2505,44 +2515,6 @@ const ShiftScheduler = () => {
         preSelectedId={preSelectedBulkId}
         onApply={handleBulkApply}
       />
-
-      {/* Debug Panel */}
-      {showDebugPanel && (
-        <div className="fixed bottom-4 right-4 w-96 max-h-64 bg-slate-900 text-slate-100 rounded-lg shadow-2xl border border-purple-600/50 z-40 flex flex-col overflow-hidden print:hidden">
-          <div className="flex justify-between items-center p-3 border-b border-slate-700 bg-slate-950">
-            <span className="text-sm font-bold text-purple-400 flex items-center gap-2">
-              <Terminal size={14} /> Debug Console
-            </span>
-            <button
-              onClick={() => setShowDebugPanel(false)}
-              className="p-1 hover:bg-slate-800 rounded"
-            >
-              <X size={14} />
-            </button>
-          </div>
-          <div className="flex-1 overflow-y-auto p-2 space-y-1 text-[10px] font-mono">
-            <div className="text-slate-400">
-              • App Status:{" "}
-              {saveStatus === "offline" ? "🔴 Offline" : "🟢 Online"}
-            </div>
-            <div className="text-slate-400">
-              • Firebase Project: {FIREBASE_CONFIG.projectId}
-            </div>
-            <div className="text-slate-400">
-              • Current Role: {currentUser.label}
-            </div>
-            <div className="text-slate-400">
-              • Team Size: {teamState.length}
-            </div>
-            <div className="text-slate-400 mt-2 border-t border-slate-700 pt-2">
-              💡 Tip: Open browser console (F12) for detailed Firebase logs
-            </div>
-            <div className="text-slate-400 mt-1">
-              🔄 Click the offline indicator to try reconnecting
-            </div>
-          </div>
-        </div>
-      )}
 
       {editingCell && (
         <CellEditor

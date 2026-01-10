@@ -2,10 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Lock, UserCheck, AlertCircle, CheckCircle } from "lucide-react";
 import bcrypt from "bcryptjs";
 import type { Employee, Translations, RoleId } from "../types";
-import {
-  MANAGER_MASTER_PASSWORD,
-  ADMIN_MASTER_PASSWORD,
-} from "../config/constants";
+import { getAuth, signInWithCustomToken } from "firebase/auth";
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -53,16 +50,59 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     setError("");
 
     if (targetRole === "manager" || targetRole === "admin") {
-      const isCorrect =
-        (targetRole === "manager" && password === MANAGER_MASTER_PASSWORD) ||
-        (targetRole === "admin" && password === ADMIN_MASTER_PASSWORD);
+      try {
+        // Validate inputs before sending
+        if (!password || password.length < 1 || password.length > 500) {
+          setError("Invalid password format");
+          return;
+        }
 
-      if (isCorrect) {
+        const cloudFunctionUrl = import.meta.env.VITE_CLOUD_FUNCTION_URL;
+        if (!cloudFunctionUrl) {
+          setError("Server configuration error. Contact administrator.");
+          return;
+        }
+
+        const res = await fetch(cloudFunctionUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ role: targetRole, password }),
+        });
+
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          if (res.status === 429) {
+            setError("Too many login attempts. Try again later.");
+          } else if (res.status === 401) {
+            setError(t.invalidPass);
+          } else {
+            setError(errorData.error || t.invalidPass);
+          }
+          return;
+        }
+
+        const data = await res.json();
+        const token = data?.token;
+
+        if (!token || typeof token !== "string") {
+          setError("Invalid server response");
+          return;
+        }
+
+        const auth = getAuth();
+        await signInWithCustomToken(auth, token);
         const name = targetRole === "admin" ? "Admin" : "Diretor";
         onLoginSuccess(targetRole, name, 0);
         onClose();
-      } else {
-        setError(t.invalidPass);
+      } catch (err: any) {
+        if (import.meta.env.DEV) {
+          console.error("Login error:", err);
+        }
+        setError(
+          err?.code === "auth/invalid-custom-token"
+            ? "Session expired. Try again."
+            : t.invalidPass
+        );
       }
     } else if (targetRole === "editor") {
       if (!selectedUser) {
