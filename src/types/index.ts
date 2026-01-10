@@ -22,8 +22,10 @@ export interface Employee {
   name: string;
   role: string;
   languages: Language[];
+  offset: number;
   password?: string;
   requirePasswordChange?: boolean;
+  rotationMode?: RotationMode;
 }
 
 export interface ShiftRequest {
