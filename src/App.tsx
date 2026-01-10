@@ -628,7 +628,7 @@ const ConfigPanel = ({
       name: "Novo Colaborador",
       role: "GCC",
       languages: ["EN"],
-      password: "1234",
+      password: "changeme",
     };
     setTeam([...team, newEmp]);
   };

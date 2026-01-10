@@ -72,7 +72,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       const user = team.find((u) => u.id === +selectedUser);
       if (!user) return;
 
-      const userPass = user.password || "1234";
+      const userPass = user.password || "changeme";
 
       // Check if password is hashed (bcrypt hashes start with $2a$ or $2b$)
       const isHashed = userPass.startsWith("$2");
@@ -91,7 +91,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         if (
           user.requirePasswordChange ||
           !user.password ||
-          user.password === "1234"
+          user.password === "changeme"
         ) {
           setIsChangeMode(true);
           setError("");
@@ -115,7 +115,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     const user = team.find((u) => u.id === +selectedUser);
     if (!user) return;
 
-    const currentStoredPass = user.password || "1234";
+    const currentStoredPass = user.password || "changeme";
 
     // Verify current password (handle both hashed and plain text)
     const isHashed = currentStoredPass.startsWith("$2");

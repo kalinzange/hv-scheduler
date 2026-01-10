@@ -174,11 +174,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleResetPassword(user.id, "1234");
+                        handleResetPassword(user.id, "changeme");
                       }}
                       className="w-full px-3 py-2 bg-orange-100 text-orange-700 rounded hover:bg-orange-200 transition text-sm font-medium"
                     >
-                      Reset to Default (1234)
+                      Reset to Default (changeme)
                     </button>
 
                     <div className="flex gap-2">

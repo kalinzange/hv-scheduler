@@ -119,7 +119,7 @@ export const TRANSLATIONS: Record<"en", Translations> = {
     newPass: "New Password",
     confirmPass: "Confirm Password",
     passChanged: "Password changed successfully!",
-    defaultPassInfo: "Default password: '1234'",
+    defaultPassInfo: "Default password: 'changeme'",
     backToLogin: "Back to Login",
     passMismatch: "Passwords do not match",
     requests: "Requests",

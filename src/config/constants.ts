@@ -94,75 +94,28 @@ export const DEFAULT_HOLIDAYS = [
   "2026-12-25",
 ];
 
+// Default initial team structure - Replace with your actual team data
+// Note: Use the admin panel to add real team members after deployment
 export const INITIAL_TEAM: Employee[] = [
   {
-    id: 4,
-    name: "Huyesin Gozcu",
+    id: 1,
+    name: "Team Member 1",
     role: "GCC",
-    languages: ["EN", "TR", "PT"],
-    password: "1234",
-  },
-  {
-    id: 6,
-    name: "Lourdes Gutierrez",
-    role: "GCC",
-    languages: ["EN", "ES", "PT"],
-    password: "1234",
-  },
-  {
-    id: 11,
-    name: "Sergio Ribeiro",
-    role: "TL",
-    languages: ["EN", "FR", "PT"],
-    password: "1234",
+    languages: ["EN", "PT"],
+    password: "changeme",
   },
   {
     id: 2,
-    name: "Filipe Cardoso",
+    name: "Team Member 2",
+    role: "GCC",
+    languages: ["EN", "PT"],
+    password: "changeme",
+  },
+  {
+    id: 3,
+    name: "Team Lead 1",
     role: "TL",
     languages: ["EN", "FR", "PT"],
-    password: "1234",
-  },
-  {
-    id: 8,
-    name: "Joao Monteiro",
-    role: "GCC",
-    languages: ["EN", "PT"],
-    password: "1234",
-  },
-  {
-    id: 14,
-    name: "Juliana Andrade",
-    role: "GCC",
-    languages: ["EN", "PT"],
-    password: "1234",
-  },
-  {
-    id: 10,
-    name: "Rita Quaresma",
-    role: "GCC",
-    languages: ["EN", "PT", "ES"],
-    password: "1234",
-  },
-  {
-    id: 5,
-    name: "Hugo Rodrigues",
-    role: "GCC",
-    languages: ["EN", "PT"],
-    password: "1234",
-  },
-  {
-    id: 9,
-    name: "Miguel Geada",
-    role: "GCC",
-    languages: ["EN", "PT"],
-    password: "1234",
-  },
-  {
-    id: 7,
-    name: "Lucas Alves",
-    role: "GCC",
-    languages: ["EN", "PT"],
-    password: "1234",
+    password: "changeme",
   },
 ];
