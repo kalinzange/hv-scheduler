@@ -412,30 +412,12 @@ const AnnualViewModal = ({
   );
 };
 
-// Helper function to get icon component by name
-const getIconComponent = (iconName: string) => {
-  const iconMap: Record<string, any> = {
-    utensils: <Utensils size={14} />,
-    graduation: <GraduationCap size={14} />,
-    zap: <Zap size={14} />,
-    hammer: <Hammer size={14} />,
-    wrench: <Wrench size={14} />,
-    trending: <TrendingUp size={14} />,
-    award: <Award size={14} />,
-    heart: <Heart size={14} />,
-    book: <BookOpen size={14} />,
-  };
-  return iconMap[iconName.toLowerCase()] || null;
-};
-
 const CellEditor = ({
   cell,
   onClose,
   onUpdate,
   legends,
   customColors,
-  customShifts,
-  customShiftIcons,
 }: any) => {
   // Build options dynamically from standard shifts and custom shifts
   const options: {
@@ -461,15 +443,6 @@ const CellEditor = ({
       icon: <Stethoscope size={14} />,
       color: customColors.S,
     },
-    // Custom shifts
-    ...customShifts.map((shift: string) => ({
-      id: shift as OverrideType,
-      label: legends[shift] || shift,
-      icon: customShiftIcons[shift]
-        ? getIconComponent(customShiftIcons[shift])
-        : undefined,
-      color: customColors[shift] || "#999999",
-    })),
   ];
 
   // Lógica de deteção de fundo de ecrã
@@ -525,8 +498,6 @@ const ConfigPanel = ({
   show,
   config,
   setConfig,
-  startDateStr,
-  setStartDateStr,
   team,
   setTeam,
   holidays,
@@ -881,36 +852,12 @@ const ConfigPanel = ({
 
       {/* Shift Legends, Hours & Colors */}
       <div className="bg-gray-50 p-3 rounded mb-4 border space-y-3">
-        <div className="flex justify-between items-center mb-2">
-          <h4 className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
-            <Palette size={12} /> Shift Legends, Hours & Colors
-          </h4>
-          <button
-            onClick={() => {
-              const newLetter =
-                prompt("Enter shift letter (e.g., TR, AB):")?.toUpperCase() ||
-                "";
-              if (newLetter && newLetter.length === 2 && !colors[newLetter]) {
-                const description =
-                  prompt(
-                    "Enter description or hours (e.g., Training, 08:00-16:00):"
-                  ) || newLetter;
-                const defaultColor = `#${Math.floor(
-                  Math.random() * 16777215
-                ).toString(16)}`;
-                setLegends({ ...legends, [newLetter]: description });
-                setColors({ ...colors, [newLetter]: defaultColor });
-                setCustomShifts([...customShifts, newLetter]);
-              }
-            }}
-            className="flex items-center gap-1 bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-[10px] font-bold border border-indigo-200 hover:bg-indigo-200"
-          >
-            <Plus size={12} /> Add+
-          </button>
-        </div>
+        <h4 className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1 mb-2">
+          <Palette size={12} /> Shift Legends, Hours & Colors
+        </h4>
         <div className="overflow-x-auto">
           <div className="space-y-2">
-            {["M", "T", "N", "F", "V", "S", ...customShifts].map((type) => (
+            {["M", "T", "N", "F", "V", "S"].map((type) => (
               <div key={type} className="flex items-center gap-1 min-w-[400px]">
                 <input
                   type="color"
@@ -930,14 +877,14 @@ const ConfigPanel = ({
                   }
                   className="flex-1 p-1 border rounded text-xs"
                 />
-              )}
-              {["F", "V", "S"].includes(type) && (
-                <span className="text-xs text-gray-500 flex-1">
-                  {t[`leg${type}` as keyof typeof t]}
-                </span>
-              )}
-            </div>
-          ))}
+                {["F", "V", "S"].includes(type) && (
+                  <span className="text-xs text-gray-500 flex-1">
+                    {t[`leg${type}` as keyof typeof t]}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -2567,8 +2514,6 @@ const ShiftScheduler = () => {
           onUpdate={handleOverride}
           legends={legends}
           customColors={colors}
-          customShifts={customShifts}
-          customShiftIcons={customShiftIcons}
         />
       )}
 
@@ -3062,8 +3007,6 @@ const ShiftScheduler = () => {
           show={showConfig}
           config={config}
           setConfig={setConfig}
-          startDateStr={startDateStr}
-          setStartDateStr={setStartDateStr}
           team={teamState}
           setTeam={setTeamState}
           holidays={holidays}
