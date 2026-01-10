@@ -412,19 +412,39 @@ const AnnualViewModal = ({
   );
 };
 
+// Helper function to get icon component by name
+const getIconComponent = (iconName: string) => {
+  const iconMap: Record<string, any> = {
+    utensils: <Utensils size={14} />,
+    graduation: <GraduationCap size={14} />,
+    zap: <Zap size={14} />,
+    hammer: <Hammer size={14} />,
+    wrench: <Wrench size={14} />,
+    trending: <TrendingUp size={14} />,
+    award: <Award size={14} />,
+    heart: <Heart size={14} />,
+    book: <BookOpen size={14} />,
+  };
+  return iconMap[iconName.toLowerCase()] || null;
+};
+
 const CellEditor = ({
   cell,
   onClose,
   onUpdate,
   legends,
   customColors,
+  customShifts,
+  customShiftIcons,
 }: any) => {
+  // Build options dynamically from standard shifts and custom shifts
   const options: {
     id: OverrideType | "CLEAR";
     label: string;
     icon?: any;
     color: string;
   }[] = [
+    // Standard shifts
     { id: "M", label: `Morning (${legends.M})`, color: customColors.M },
     { id: "T", label: `Afternoon (${legends.T})`, color: customColors.T },
     { id: "N", label: `Night (${legends.N})`, color: customColors.N },
@@ -441,12 +461,15 @@ const CellEditor = ({
       icon: <Stethoscope size={14} />,
       color: customColors.S,
     },
-    {
-      id: "CLEAR",
-      label: "Reset to Auto",
-      icon: <Eraser size={14} />,
-      color: "#ffffff",
-    },
+    // Custom shifts
+    ...customShifts.map((shift: string) => ({
+      id: shift as OverrideType,
+      label: legends[shift] || shift,
+      icon: customShiftIcons[shift]
+        ? getIconComponent(customShiftIcons[shift])
+        : undefined,
+      color: customColors[shift] || "#999999",
+    })),
   ];
 
   // Lógica de deteção de fundo de ecrã
@@ -478,7 +501,7 @@ const CellEditor = ({
           <button
             key={opt.id}
             onClick={() => {
-              onUpdate(cell.key, opt.id === "CLEAR" ? undefined : opt.id);
+              onUpdate(cell.key, opt.id);
               onClose();
             }}
             className="flex items-center gap-2 p-2 text-xs rounded hover:bg-gray-100 text-left border transition-colors"
@@ -597,39 +620,25 @@ const ConfigPanel = ({
 
       {/* ... existing General Params section ... */}
       <div className="bg-gray-50 p-3 rounded mb-4 border space-y-3">
-        <h4 className="text-xs font-bold text-gray-500 uppercase">
-          {t.generalParams}
-        </h4>
-        <div>
-          <label className="block text-xs text-gray-600 mb-1">
-            {t.startDate}
-          </label>
-          <input
-            type="date"
-            value={startDateStr}
-            onChange={(e) => setStartDateStr(e.target.value)}
-            className="w-full p-1 border rounded text-sm"
-          />
-        </div>
-        <div className="border-t pt-2 mt-2">
+        <div className="border-t pt-1.5 mt-0">
           <label className="block text-xs font-bold text-gray-600 mb-1 flex items-center gap-1">
             <Calendar size={12} /> {t.holidaysSection}
           </label>
-          <div className="flex gap-2 mb-2">
+          <div className="flex gap-1.5 mb-1.5">
             <input
               type="date"
               value={newHoliday}
               onChange={(e) => setNewHoliday(e.target.value)}
-              className="flex-1 p-1 border rounded text-xs"
+              className="flex-1 p-0.5 border rounded text-[10px]"
             />
             <button
               onClick={handleAddHoliday}
-              className="bg-indigo-100 text-indigo-700 px-2 rounded hover:bg-indigo-200"
+              className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded hover:bg-indigo-200"
             >
               <Plus size={14} />
             </button>
           </div>
-          <div className="max-h-24 overflow-y-auto space-y-1">
+          <div className="max-h-20 overflow-y-auto space-y-0.5">
             {holidays.map((h: string) => (
               <div
                 key={h}
@@ -727,47 +736,49 @@ const ConfigPanel = ({
           <ShieldAlert size={12} /> Coverage, Weekend & Hours
         </h4>
         <div>
-          <label className="block text-[10px] font-bold text-gray-600 mb-1">
+          <label className="block text-xs font-bold text-gray-600 mb-1">
             {t.minStaffWarn}
           </label>
-          <div className="grid grid-cols-3 gap-2">
-            <div>
-              <span className="text-[9px] block text-center">M</span>
-              <input
-                type="number"
-                value={minStaff.M}
-                onChange={(e) =>
-                  setMinStaff({ ...minStaff, M: +e.target.value })
-                }
-                className="w-full p-1 border rounded text-center"
-              />
-            </div>
-            <div>
-              <span className="text-[9px] block text-center">T</span>
-              <input
-                type="number"
-                value={minStaff.T}
-                onChange={(e) =>
-                  setMinStaff({ ...minStaff, T: +e.target.value })
-                }
-                className="w-full p-1 border rounded text-center"
-              />
-            </div>
-            <div>
-              <span className="text-[9px] block text-center">N</span>
-              <input
-                type="number"
-                value={minStaff.N}
-                onChange={(e) =>
-                  setMinStaff({ ...minStaff, N: +e.target.value })
-                }
-                className="w-full p-1 border rounded text-center"
-              />
+          <div className="overflow-x-auto">
+            <div className="grid grid-cols-3 gap-2 min-w-[300px]">
+              <div>
+                <span className="text-[9px] block text-center">M</span>
+                <input
+                  type="number"
+                  value={minStaff.M}
+                  onChange={(e) =>
+                    setMinStaff({ ...minStaff, M: +e.target.value })
+                  }
+                  className="w-full p-1 border rounded text-center"
+                />
+              </div>
+              <div>
+                <span className="text-[9px] block text-center">T</span>
+                <input
+                  type="number"
+                  value={minStaff.T}
+                  onChange={(e) =>
+                    setMinStaff({ ...minStaff, T: +e.target.value })
+                  }
+                  className="w-full p-1 border rounded text-center"
+                />
+              </div>
+              <div>
+                <span className="text-[9px] block text-center">N</span>
+                <input
+                  type="number"
+                  value={minStaff.N}
+                  onChange={(e) =>
+                    setMinStaff({ ...minStaff, N: +e.target.value })
+                  }
+                  className="w-full p-1 border rounded text-center"
+                />
+              </div>
             </div>
           </div>
         </div>
         <div className="border-t pt-2">
-          <label className="block text-[10px] font-bold text-gray-600 mb-1">
+          <label className="block text-xs font-bold text-gray-600 mb-1">
             {t.weekendSection}
           </label>
           <div className="flex gap-1">
@@ -775,7 +786,7 @@ const ConfigPanel = ({
               <button
                 key={day}
                 onClick={() => handleWeekendToggle(idx)}
-                className={`text-[9px] px-1.5 py-1 rounded border ${
+                className={`text-xs px-2 py-1 rounded border ${
                   weekendDays.includes(idx)
                     ? "bg-indigo-600 text-white"
                     : "bg-white text-gray-500"
@@ -787,46 +798,48 @@ const ConfigPanel = ({
           </div>
         </div>
         <div className="border-t pt-2">
-          <label className="block text-[10px] font-bold text-gray-600 mb-1">
+          <label className="block text-xs font-bold text-gray-600 mb-1">
             {t.hoursPerShift}
           </label>
-          <div className="grid grid-cols-3 gap-2 mb-2">
-            <div>
-              <span className="text-[9px] block text-center">M</span>
-              <input
-                type="number"
-                value={hoursConfig.M}
-                onChange={(e) =>
-                  setHoursConfig({ ...hoursConfig, M: +e.target.value })
-                }
-                className="w-full p-1 border rounded text-center"
-              />
-            </div>
-            <div>
-              <span className="text-[9px] block text-center">T</span>
-              <input
-                type="number"
-                value={hoursConfig.T}
-                onChange={(e) =>
-                  setHoursConfig({ ...hoursConfig, T: +e.target.value })
-                }
-                className="w-full p-1 border rounded text-center"
-              />
-            </div>
-            <div>
-              <span className="text-[9px] block text-center">N</span>
-              <input
-                type="number"
-                value={hoursConfig.N}
-                onChange={(e) =>
-                  setHoursConfig({ ...hoursConfig, N: +e.target.value })
-                }
-                className="w-full p-1 border rounded text-center"
-              />
+          <div className="overflow-x-auto mb-2">
+            <div className="grid grid-cols-3 gap-2 min-w-[300px]">
+              <div>
+                <span className="text-[9px] block text-center">M</span>
+                <input
+                  type="number"
+                  value={hoursConfig.M}
+                  onChange={(e) =>
+                    setHoursConfig({ ...hoursConfig, M: +e.target.value })
+                  }
+                  className="w-full p-1 border rounded text-center"
+                />
+              </div>
+              <div>
+                <span className="text-[9px] block text-center">T</span>
+                <input
+                  type="number"
+                  value={hoursConfig.T}
+                  onChange={(e) =>
+                    setHoursConfig({ ...hoursConfig, T: +e.target.value })
+                  }
+                  className="w-full p-1 border rounded text-center"
+                />
+              </div>
+              <div>
+                <span className="text-[9px] block text-center">N</span>
+                <input
+                  type="number"
+                  value={hoursConfig.N}
+                  onChange={(e) =>
+                    setHoursConfig({ ...hoursConfig, N: +e.target.value })
+                  }
+                  className="w-full p-1 border rounded text-center"
+                />
+              </div>
             </div>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-[10px] font-bold text-gray-600">
+            <span className="text-xs font-bold text-gray-600">
               {t.hoursTarget}
             </span>
             <input
@@ -840,14 +853,14 @@ const ConfigPanel = ({
           </div>
         </div>
         <div className="border-t pt-2">
-          <label className="block text-[10px] font-bold text-gray-600 mb-1">
+          <label className="block text-xs font-bold text-gray-600 mb-1">
             {t.langsSection}
           </label>
           <div className="flex flex-wrap gap-1">
             {ALL_LANGUAGES.map((lang) => (
               <label
                 key={lang}
-                className={`flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded cursor-pointer border ${
+                className={`flex items-center gap-1 text-xs px-2 py-1 rounded cursor-pointer border ${
                   requiredLangs.includes(lang)
                     ? "bg-indigo-100 border-indigo-300 text-indigo-800"
                     : "bg-white border-gray-200 text-gray-400"
@@ -866,26 +879,52 @@ const ConfigPanel = ({
         </div>
       </div>
 
-      {/* ... existing Legends section ... */}
+      {/* Shift Legends, Hours & Colors */}
       <div className="bg-gray-50 p-3 rounded mb-4 border space-y-3">
-        <h4 className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
-          <Palette size={12} /> {t.legendsSection} & {t.colorsSection}
-        </h4>
-        <div className="space-y-2">
-          {["M", "T", "N", "F", "V", "S"].map((type) => (
-            <div key={type} className="flex items-center gap-2">
-              <input
-                type="color"
-                value={colors[type]}
-                onChange={(e) =>
-                  setColors({ ...colors, [type]: e.target.value })
-                }
-                className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
-              />
-              <span className="text-xs font-bold w-4">{type}</span>
-              {["M", "T", "N"].includes(type) && (
+        <div className="flex justify-between items-center mb-2">
+          <h4 className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
+            <Palette size={12} /> Shift Legends, Hours & Colors
+          </h4>
+          <button
+            onClick={() => {
+              const newLetter =
+                prompt("Enter shift letter (e.g., TR, AB):")?.toUpperCase() ||
+                "";
+              if (newLetter && newLetter.length === 2 && !colors[newLetter]) {
+                const description =
+                  prompt(
+                    "Enter description or hours (e.g., Training, 08:00-16:00):"
+                  ) || newLetter;
+                const defaultColor = `#${Math.floor(
+                  Math.random() * 16777215
+                ).toString(16)}`;
+                setLegends({ ...legends, [newLetter]: description });
+                setColors({ ...colors, [newLetter]: defaultColor });
+                setCustomShifts([...customShifts, newLetter]);
+              }
+            }}
+            className="flex items-center gap-1 bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-[10px] font-bold border border-indigo-200 hover:bg-indigo-200"
+          >
+            <Plus size={12} /> Add+
+          </button>
+        </div>
+        <div className="overflow-x-auto">
+          <div className="space-y-2">
+            {["M", "T", "N", "F", "V", "S", ...customShifts].map((type) => (
+              <div key={type} className="flex items-center gap-1 min-w-[400px]">
                 <input
-                  value={legends[type]}
+                  type="color"
+                  value={colors[type]}
+                  onChange={(e) =>
+                    setColors({ ...colors, [type]: e.target.value })
+                  }
+                  className="w-5 h-5 p-0 border-0 rounded cursor-pointer flex-shrink-0"
+                />
+                <span className="text-[10px] font-bold w-4 flex-shrink-0">
+                  {type}
+                </span>
+                <input
+                  value={legends[type] || ""}
                   onChange={(e) =>
                     setLegends({ ...legends, [type]: e.target.value })
                   }
@@ -916,6 +955,11 @@ const ConfigPanel = ({
         </div>
 
         <div className="space-y-3 pb-10">
+          {team.length === 0 && (
+            <div className="text-center text-xs text-gray-400 py-8 italic">
+              No employees yet
+            </div>
+          )}
           {team.map((emp: Employee) => (
             <div
               key={emp.id}
@@ -2523,6 +2567,8 @@ const ShiftScheduler = () => {
           onUpdate={handleOverride}
           legends={legends}
           customColors={colors}
+          customShifts={customShifts}
+          customShiftIcons={customShiftIcons}
         />
       )}
 
