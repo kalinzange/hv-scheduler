@@ -13,7 +13,7 @@ createRoot(document.getElementById("root")!).render(
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("/service-worker.js")
+      .register("/hv-scheduler/service-worker.js")
       .catch((error) => console.error("SW registration failed", error));
   });
 }

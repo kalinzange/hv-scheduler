@@ -1672,7 +1672,6 @@ const ShiftScheduler = () => {
     const next = redoHistory[redoHistory.length - 1];
     setUndoHistory((prev) => [...prev, { ...overrides }]);
     setOverrides(next);
-    setRedoHistory((prev) => prev.slice(0, -1));
   };
 
   const handleBulkApply = (
@@ -2724,6 +2723,13 @@ const ShiftScheduler = () => {
             ) : null}
           </div>
         </div>
+
+        {/* Viewer notice when nothing is published */}
+        {!isManager && Object.keys(publishedOverrides).length === 0 && (
+          <div className="px-2 sm:px-3 md:px-4 py-1 bg-amber-50 text-amber-800 border-t border-b border-amber-200 text-xs">
+            No published schedule yet. Please contact a manager to publish.
+          </div>
+        )}
 
         {/* Bottom Row: Filters & Nav */}
         <div className="px-2 sm:px-3 md:px-4 py-0.5 bg-gray-50 border-t flex flex-col md:flex-row justify-between items-start md:items-center gap-0.5 md:gap-0 overflow-x-auto">

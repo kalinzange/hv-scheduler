@@ -1,10 +1,15 @@
 import { defineConfig } from "vite";
-import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 
-export default defineConfig(({ mode: _ }) => {
-  return {
-    base: "/hv-scheduler/", // ← ADD THIS LINE
-    plugins: [react(), tailwindcss()],
-  };
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+  base: "/hv-scheduler/",
+  build: {
+    outDir: "docs",
+  },
+  preview: {
+    port: 4173,
+    strictPort: true,
+  },
 });
