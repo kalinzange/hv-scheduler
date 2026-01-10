@@ -1039,6 +1039,7 @@ const ShiftScheduler = () => {
   const [publishedOverrides, setPublishedOverrides] = useState<
     Record<string, OverrideType>
   >({});
+  const [lastPublished, setLastPublished] = useState<number | null>(null);
   const [hasUnpublishedChanges, setHasUnpublishedChanges] = useState(false);
 
   // -- STATE VARIABLES (Initialized with defaults) --
@@ -1200,6 +1201,7 @@ const ShiftScheduler = () => {
               } else if (data.overrides) {
                 setPublishedOverrides(data.overrides);
               }
+              if (data.lastPublished) setLastPublished(data.lastPublished);
 
               setInitError(false);
               setIsLoading(false);
@@ -1339,6 +1341,7 @@ const ShiftScheduler = () => {
             colors,
             overrides,
             publishedOverrides,
+            lastPublished,
             config,
             hoursConfig,
             team: teamState,
@@ -1371,6 +1374,7 @@ const ShiftScheduler = () => {
     colors,
     overrides,
     publishedOverrides,
+    lastPublished,
     config,
     hoursConfig,
     teamState,
@@ -1392,6 +1396,7 @@ const ShiftScheduler = () => {
 
   const handlePublish = () => {
     setPublishedOverrides({ ...overrides });
+    setLastPublished(Date.now());
     setHasUnpublishedChanges(false);
   };
 
@@ -2643,26 +2648,33 @@ const ShiftScheduler = () => {
             </button>
 
             {isManager && (
-              <button
-                onClick={handlePublish}
-                disabled={!hasUnpublishedChanges}
-                className={`flex items-center px-3 py-2 rounded transition border ${
-                  hasUnpublishedChanges
-                    ? "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 cursor-pointer"
-                    : "bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed"
-                }`}
-                title={
-                  hasUnpublishedChanges
-                    ? "Publish schedule to viewers"
-                    : "No unpublished changes"
-                }
-              >
-                <Upload size={16} className="mr-2" />
-                Publish{" "}
-                {hasUnpublishedChanges && (
-                  <span className="ml-1 font-bold">*</span>
+              <div className="flex flex-col gap-0.5">
+                <button
+                  onClick={handlePublish}
+                  disabled={!hasUnpublishedChanges}
+                  className={`flex items-center px-3 py-2 rounded transition border ${
+                    hasUnpublishedChanges
+                      ? "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 cursor-pointer"
+                      : "bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed"
+                  }`}
+                  title={
+                    hasUnpublishedChanges
+                      ? "Publish schedule to viewers"
+                      : "No unpublished changes"
+                  }
+                >
+                  <Upload size={16} className="mr-2" />
+                  Publish{" "}
+                  {hasUnpublishedChanges && (
+                    <span className="ml-1 font-bold">*</span>
+                  )}
+                </button>
+                {lastPublished && (
+                  <div className="text-[9px] text-gray-500 px-1 text-center">
+                    Last: {new Date(lastPublished).toLocaleString()}
+                  </div>
                 )}
-              </button>
+              </div>
             )}
 
             {/* Undo/Redo Buttons */}
