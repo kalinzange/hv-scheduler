@@ -1,9 +1,24 @@
 {
-  "name": "escala-turnos",
-  "private": true,
-  "version": "0.0.0",
+  "name": "hv-scheduler",
+  "private": false,
+  "version": "1.0.0",
   "type": "module",
-  "homepage": "http://localhost:5173/gcc-scheduler",
+  "description": "Team shift management application with role-based access control",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kalinzange/hv-scheduler.git"
+  },
+  "keywords": [
+    "shift-scheduler",
+    "team-management",
+    "react",
+    "typescript",
+    "firebase",
+    "schedule-management"
+  ],
+  "author": "kalinzange",
+  "license": "MIT",
+  "homepage": "https://kalinzange.github.io/hv-scheduler/",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
