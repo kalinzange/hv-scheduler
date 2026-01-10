@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "http://localhost:5173/gcc-scheduler",
+  "homepage": "https://kalinzange.github.io/hv-scheduler",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",

@@ -9,5 +9,6 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react(), tailwindcss()],
+    base: "/hv-scheduler/", // GitHub Pages base path
   };
 });
