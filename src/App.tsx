@@ -1118,11 +1118,7 @@ const ShiftScheduler = () => {
     let isComponentMounted = true;
 
     const initializeFirebase = () => {
-      if (import.meta.env.DEV) console.log("[Firebase] Initializing...");
-
       if (!FIREBASE_CONFIG.apiKey) {
-        if (import.meta.env.DEV)
-          console.warn("[Firebase] Config missing. Running in offline mode.");
         if (isComponentMounted) {
           setIsLoading(false);
           setSaveStatus("offline");
@@ -1131,20 +1127,16 @@ const ShiftScheduler = () => {
       }
 
       try {
-        if (import.meta.env.DEV) {
-          console.log("[Firebase] Initializing app...");
-        }
         const app = initializeApp(FIREBASE_CONFIG);
         const auth = getAuth(app);
         const db = getFirestore(app);
 
         const initAuth = async () => {
           try {
-            if (import.meta.env.DEV)
-              console.log("[Firebase] Signing in anonymously...");
+            if (auth.currentUser) {
+              return;
+            }
             await signInAnonymously(auth);
-            if (import.meta.env.DEV)
-              console.log("[Firebase] Anonymous auth successful");
             retryCountRef.current = 0; // Reset retry count on success
           } catch (authError: any) {
             if (import.meta.env.DEV) {
@@ -1170,28 +1162,17 @@ const ShiftScheduler = () => {
           "global_state"
         );
 
-        if (import.meta.env.DEV) {
-          console.log("[Firebase] Setting up listener for global_state");
-        }
-
         unsubscribe = onSnapshot(
           dataDocRef,
           (docSnap: DocumentSnapshot) => {
             if (!isComponentMounted) return;
 
             if (docSnap.exists()) {
-              if (import.meta.env.DEV)
-                console.log("[Firebase] Document found. Loading data...");
-
               const data = docSnap.data();
 
               // For write-enabled users (managers), only load on initial mount
               // and don't listen to updates (prevents overwriting local edits)
               if (!isLoadingRef.current && canWriteRef.current) {
-                if (import.meta.env.DEV)
-                  console.log(
-                    "[Firebase] Skipping remote update for editing user"
-                  );
                 return; // Don't process any data for editing users after initial load
               }
 
@@ -1224,15 +1205,9 @@ const ShiftScheduler = () => {
               setInitError(false);
               setIsLoading(false);
               setSaveStatus("saved");
-              if (import.meta.env.DEV)
-                console.log("[Firebase] Data loaded successfully");
               retryCountRef.current = 0; // Reset retry count on success
             } else {
               // Document doesn't exist yet - initialize with defaults
-              if (import.meta.env.DEV)
-                console.log(
-                  "[Firebase] Document not found. Will use default data."
-                );
               setInitError(false);
               setIsLoading(false);
               setSaveStatus("saved");
@@ -1257,10 +1232,6 @@ const ShiftScheduler = () => {
               setSaveStatus("offline");
             }
 
-            if (import.meta.env.DEV)
-              console.warn(
-                "[Firebase] Running in offline mode. Changes will be saved locally."
-              );
             // Attempt retry
             scheduleRetry();
           }
@@ -1284,10 +1255,6 @@ const ShiftScheduler = () => {
 
     const scheduleRetry = () => {
       if (retryCountRef.current >= maxRetries) {
-        if (import.meta.env.DEV)
-          console.log(
-            "[Firebase] Max retries reached. Staying in offline mode."
-          );
         return;
       }
 
@@ -1295,18 +1262,10 @@ const ShiftScheduler = () => {
         1000 * Math.pow(2, retryCountRef.current),
         30000
       ); // Exponential backoff, max 30s
-      if (import.meta.env.DEV)
-        console.log(
-          `[Firebase] Scheduling reconnection attempt ${
-            retryCountRef.current + 1
-          }/${maxRetries} in ${delayMs}ms...`
-        );
       retryCountRef.current++;
 
       retryTimeout = setTimeout(() => {
         if (isComponentMounted) {
-          if (import.meta.env.DEV)
-            console.log("[Firebase] Attempting to reconnect...");
           if (unsubscribe) unsubscribe();
           initializeFirebase();
         }
@@ -1367,9 +1326,6 @@ const ShiftScheduler = () => {
           "global_state"
         );
 
-        if (import.meta.env.DEV)
-          console.log("[Save] Attempting to save data...");
-
         await setDoc(dataDocRef, {
           startDateStr,
           holidays,
@@ -1388,7 +1344,6 @@ const ShiftScheduler = () => {
           lastUpdated: Date.now(),
         });
 
-        if (import.meta.env.DEV) console.log("[Save] Successfully saved");
         setSaveStatus("saved");
       } catch (err: any) {
         if (import.meta.env.DEV) {
@@ -1397,6 +1352,16 @@ const ShiftScheduler = () => {
             message: err?.message,
             error: err,
           });
+          try {
+            const auth = getAuth();
+            const tokenResult = await auth.currentUser?.getIdTokenResult();
+            console.error("[Save] Current auth context", {
+              uid: auth.currentUser?.uid,
+              claims: tokenResult?.claims,
+            });
+          } catch (claimErr) {
+            console.error("[Save] Failed to fetch token claims", claimErr);
+          }
         }
         setSaveStatus("error");
       }

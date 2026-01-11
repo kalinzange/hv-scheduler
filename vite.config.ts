@@ -2,9 +2,10 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react(), tailwindcss()],
-  base: "/hv-scheduler/",
+  // Use root base in dev so assets load at localhost; keep GH Pages base for production builds
+  base: mode === "production" ? "/hv-scheduler/" : "/",
   build: {
     outDir: "docs",
   },
@@ -12,4 +13,4 @@ export default defineConfig({
     port: 4173,
     strictPort: true,
   },
-});
+}));

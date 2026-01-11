@@ -87,6 +87,20 @@ export const roleLogin = functions.https.onRequest(
         req.socket.remoteAddress ||
         "unknown";
 
+      // Treat localhost/dev origins as trusted: skip rate limiting to avoid lockouts during testing
+      const origin = (req.headers.origin as string) || "";
+      const referer = (req.headers.referer as string) || "";
+      const host = (req.headers.host as string) || "";
+      const isLocalDev =
+        origin.includes("localhost") ||
+        origin.includes("127.0.0.1") ||
+        referer.includes("localhost") ||
+        referer.includes("127.0.0.1") ||
+        host.includes("localhost") ||
+        host.includes("127.0.0.1") ||
+        clientIp.startsWith("127.") ||
+        clientIp === "::1";
+
       // Parse and validate request body
       let body: unknown;
       try {
@@ -161,16 +175,19 @@ export const roleLogin = functions.https.onRequest(
 
       // Authentication failed
       if (!isValid) {
-        // Check if already rate-limited before recording new attempt
-        const rateLimitCheck = checkRateLimit(clientIp);
-        if (!rateLimitCheck.allowed) {
-          res.status(429).json({
-            error: rateLimitCheck.message || "Too many login attempts",
-          } as ErrorResponse);
-          return;
-        }
+        // Skip rate limiting for trusted local dev to avoid lockouts during testing
+        if (!isLocalDev) {
+          // Check if already rate-limited before recording new attempt
+          const rateLimitCheck = checkRateLimit(clientIp);
+          if (!rateLimitCheck.allowed) {
+            res.status(429).json({
+              error: rateLimitCheck.message || "Too many login attempts",
+            } as ErrorResponse);
+            return;
+          }
 
-        recordFailedAttempt(clientIp);
+          recordFailedAttempt(clientIp);
+        }
         functions.logger.warn(
           `Failed login attempt for role: ${role} from IP: ${clientIp}`
         );

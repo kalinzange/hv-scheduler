@@ -66,6 +66,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         const res = await fetch(cloudFunctionUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          mode: "cors",
           body: JSON.stringify({ role: targetRole, password }),
         });
 
@@ -90,6 +91,15 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         }
 
         const auth = getAuth();
+        // Ensure we are not still on an anonymous session before custom token login
+        try {
+          await auth.signOut();
+        } catch (e) {
+          if (import.meta.env.DEV) {
+            console.warn("[Login] signOut before custom token failed", e);
+          }
+        }
+
         await signInWithCustomToken(auth, token);
         const name = targetRole === "admin" ? "Admin" : "Diretor";
         onLoginSuccess(targetRole, name, 0);
