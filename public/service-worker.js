@@ -1,4 +1,4 @@
-const CACHE_NAME = "gcc-scheduler-cache-v1";
+const CACHE_NAME = "gcc-scheduler-cache-v2";
 const OFFLINE_ASSETS = [
   "/hv-scheduler/",
   "/hv-scheduler/index.html",
