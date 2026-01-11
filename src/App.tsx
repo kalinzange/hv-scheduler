@@ -43,7 +43,11 @@ import {
 
 // --- FIREBASE IMPORTS ---
 import { initializeApp, getApp } from "firebase/app";
-import { getAuth, signInAnonymously } from "firebase/auth";
+import {
+  getAuth,
+  signInAnonymously,
+  signInWithCustomToken,
+} from "firebase/auth";
 import {
   getFirestore,
   initializeFirestore,
@@ -1141,6 +1145,16 @@ const ShiftScheduler = () => {
           try {
             if (auth.currentUser) {
               return;
+            }
+            // Try to restore session from stored token
+            const storedToken = sessionStorage.getItem("firebaseToken");
+            if (storedToken) {
+              try {
+                await signInWithCustomToken(auth, storedToken);
+                return; // Session restored
+              } catch (err) {
+                sessionStorage.removeItem("firebaseToken"); // Token invalid, clear it
+              }
             }
             await signInAnonymously(auth);
             retryCountRef.current = 0; // Reset retry count on success
@@ -2468,6 +2482,16 @@ const ShiftScheduler = () => {
         }
       `}</style>
 
+      {/* --- DATA LOADING INDICATOR --- */}
+      {isLoading && (
+        <div className="bg-blue-50 border-b-2 border-blue-400 text-blue-800 p-3 flex items-center gap-3 z-40 print:hidden">
+          <Loader2 size={18} className="animate-spin flex-shrink-0" />
+          <span className="text-sm font-medium">
+            Loading schedule data. Please wait before making edits...
+          </span>
+        </div>
+      )}
+
       {/* --- BARRA DE PERMISSÕES & CLOUD --- */}
       <div className="bg-slate-900 text-white p-2 shadow-lg z-30 print:hidden flex justify-between items-center px-6">
         <div className="flex items-center gap-4">
@@ -2730,21 +2754,26 @@ const ShiftScheduler = () => {
               <div className="flex flex-col gap-0.5">
                 <button
                   onClick={handlePublish}
-                  disabled={!hasUnpublishedChanges}
+                  disabled={!hasUnpublishedChanges || isLoading}
                   className={`flex items-center px-3 py-2 rounded transition border ${
-                    hasUnpublishedChanges
+                    hasUnpublishedChanges && !isLoading
                       ? "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 cursor-pointer"
                       : "bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed"
                   }`}
                   title={
-                    hasUnpublishedChanges
+                    isLoading
+                      ? "Loading schedule data..."
+                      : hasUnpublishedChanges
                       ? "Publish schedule to viewers"
                       : "No unpublished changes"
                   }
                 >
-                  <Upload size={16} className="mr-2" />
-                  Publish{" "}
-                  {hasUnpublishedChanges && (
+                  {isLoading && (
+                    <Loader2 size={16} className="mr-2 animate-spin" />
+                  )}
+                  {!isLoading && <Upload size={16} className="mr-2" />}
+                  {isLoading ? "Loading..." : "Publish"}{" "}
+                  {hasUnpublishedChanges && !isLoading && (
                     <span className="ml-1 font-bold">*</span>
                   )}
                 </button>

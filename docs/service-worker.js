@@ -1,4 +1,4 @@
-const CACHE_NAME = "gcc-scheduler-cache-v1";
+const CACHE_NAME = "gcc-scheduler-cache-v2";
 const OFFLINE_ASSETS = [
   "/hv-scheduler/",
   "/hv-scheduler/index.html",
@@ -31,6 +31,8 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
+  // Skip caching for non-HTTP(S) requests (chrome-extension, etc.)
+  if (!event.request.url.startsWith("http")) return;
   if (event.request.method !== "GET") return;
 
   event.respondWith(
