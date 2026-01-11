@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Lock, UserCheck, AlertCircle, CheckCircle } from "lucide-react";
 import bcrypt from "bcryptjs";
 import type { Employee, Translations, RoleId } from "../types";
@@ -32,6 +32,28 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const [isChangeMode, setIsChangeMode] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+
+  const groupedTeam = useMemo(() => {
+    const buckets = team.reduce<Record<string, Employee[]>>((acc, member) => {
+      const roleKey = member.role || "Other";
+      if (!acc[roleKey]) acc[roleKey] = [];
+      acc[roleKey].push(member);
+      return acc;
+    }, {});
+
+    const roleOrder = ["GCC", "Field Dispatch", "Remote Ops", "TL"];
+    const roleIndex = (role: string) => {
+      const idx = roleOrder.indexOf(role);
+      return idx === -1 ? roleOrder.length : idx;
+    };
+
+    return Object.entries(buckets)
+      .sort(([roleA], [roleB]) => roleIndex(roleA) - roleIndex(roleB))
+      .map(([role, members]) => ({
+        role,
+        members: members.slice().sort((a, b) => a.name.localeCompare(b.name)),
+      }));
+  }, [team]);
 
   useEffect(() => {
     if (isOpen) {
@@ -266,10 +288,14 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                     required
                   >
                     <option value="">{t.selectUser}</option>
-                    {team.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.name} - {u.role}
-                      </option>
+                    {groupedTeam.map(({ role, members }) => (
+                      <optgroup key={role} label={role}>
+                        {members.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.name}
+                          </option>
+                        ))}
+                      </optgroup>
                     ))}
                   </select>
                 </div>
@@ -306,8 +332,21 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               {targetRole === "editor" && (
                 <button
                   type="button"
-                  onClick={() => setIsChangeMode(true)}
-                  className="w-full text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+                  onClick={() => {
+                    if (!selectedUser) {
+                      setError(t.selectUser);
+                      return;
+                    }
+                    setIsChangeMode(true);
+                    setError("");
+                    setSuccessMsg("");
+                  }}
+                  className={`w-full text-sm font-medium rounded-lg px-3 py-2 border transition ${
+                    selectedUser
+                      ? "text-indigo-600 bg-indigo-50 border-indigo-100 hover:text-indigo-700 hover:bg-indigo-100 hover:border-indigo-300 active:translate-y-[1px]"
+                      : "text-gray-400 cursor-not-allowed bg-gray-50 border-gray-200"
+                  }`}
+                  disabled={!selectedUser}
                 >
                   {t.changePass}
                 </button>
