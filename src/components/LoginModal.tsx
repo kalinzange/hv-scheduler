@@ -12,6 +12,7 @@ interface LoginModalProps {
   onLoginSuccess: (role: RoleId, name: string, userId: number) => void;
   onTeamUpdate: (updater: (prev: Employee[]) => Employee[]) => void;
   t: Translations;
+  tokenExpiredMsg?: string; // Message when token expires
 }
 
 export const LoginModal: React.FC<LoginModalProps> = ({
@@ -22,6 +23,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   onLoginSuccess,
   onTeamUpdate,
   t,
+  tokenExpiredMsg = "",
 }) => {
   const [password, setPassword] = useState("");
   const [selectedUser, setSelectedUser] = useState("");
@@ -234,6 +236,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           </p>
         </div>
         <div className="p-8">
+          {tokenExpiredMsg && (
+            <div className="bg-orange-50 text-orange-700 p-3 rounded-lg text-sm flex items-center gap-2 border border-orange-200 mb-4">
+              <AlertCircle size={16} /> {tokenExpiredMsg}
+            </div>
+          )}
           {error && (
             <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-center gap-2 border border-red-100 animate-shake mb-4">
               <AlertCircle size={16} /> {error}

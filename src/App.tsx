@@ -47,6 +47,7 @@ import {
   getAuth,
   signInAnonymously,
   signInWithCustomToken,
+  signOut,
 } from "firebase/auth";
 import {
   getFirestore,
@@ -1018,12 +1019,20 @@ const ShiftScheduler = () => {
   const [loggedInName, setLoggedInName] = useState<string>("");
   const [loggedInUserId, setLoggedInUserId] = useState<number>(0);
   const [preSelectedBulkId, setPreSelectedBulkId] = useState<string>("");
+  const [tokenExpiredMsg, setTokenExpiredMsg] = useState<string>(""); // Message when token expires
 
   // Ref to prevent infinite loops between Firebase sync and local save
   const isRemoteUpdate = useRef(false);
   const canWriteRef = useRef(false);
   const isLoadingRef = useRef(true);
   const dbRef = useRef<any>(null); // Store Firestore instance for consistent usage
+  const previousUserRoleRef = useRef<RoleId>("viewer"); // Track previous role to detect token expiration
+  const lastActivityRef = useRef<number>(Date.now()); // Track last user interaction
+  const lastRefreshRef = useRef<number>(Date.now()); // Track last token refresh
+  const activityListenersAttachedRef = useRef(false);
+  const idleCheckIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
+    null
+  );
 
   // ref to calendar scroll container and extra-days flag to append next-month days
   const calendarRef = useRef<HTMLDivElement | null>(null);
@@ -1116,6 +1125,9 @@ const ShiftScheduler = () => {
   const [requests, setRequests] = useState<ShiftRequest[]>([]);
   const retryCountRef = useRef(0);
   const maxRetries = 5;
+  const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes inactivity logout
+  const REFRESH_INTERVAL_MS = 45 * 60 * 1000; // refresh token every 45 minutes while active
+  const IDLE_POLL_MS = 60 * 1000; // check idle status every 60 seconds
 
   // --- FIREBASE INIT & SYNC ---
   useEffect(() => {
@@ -1309,6 +1321,117 @@ const ShiftScheduler = () => {
       if (retryTimeout) clearTimeout(retryTimeout);
     };
   }, []);
+
+  // --- USER ACTIVITY TRACKING & TOKEN REFRESH ---
+  useEffect(() => {
+    const markActivity = () => {
+      lastActivityRef.current = Date.now();
+    };
+
+    if (!activityListenersAttachedRef.current) {
+      window.addEventListener("mousemove", markActivity);
+      window.addEventListener("keydown", markActivity);
+      window.addEventListener("click", markActivity);
+      window.addEventListener("touchstart", markActivity);
+      activityListenersAttachedRef.current = true;
+    }
+
+    return () => {
+      window.removeEventListener("mousemove", markActivity);
+      window.removeEventListener("keydown", markActivity);
+      window.removeEventListener("click", markActivity);
+      window.removeEventListener("touchstart", markActivity);
+      activityListenersAttachedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const auth = getAuth();
+
+    const clearIdleTimer = () => {
+      if (idleCheckIntervalRef.current) {
+        clearInterval(idleCheckIntervalRef.current);
+        idleCheckIntervalRef.current = null;
+      }
+    };
+
+    const forceLogoutForIdle = async () => {
+      sessionStorage.removeItem("firebaseToken");
+      try {
+        await signOut(auth);
+      } catch (err) {
+        if (import.meta.env.DEV)
+          console.warn("[Auth] signOut during idle failed", err);
+      }
+      previousUserRoleRef.current = "viewer";
+      setCurrentUser(ROLES.VIEWER);
+      setLoggedInName("");
+      setLoggedInUserId(0);
+      setTokenExpiredMsg(
+        "Session expired due to inactivity. Please log in again."
+      );
+      setLoginModalOpen(true);
+      clearIdleTimer();
+    };
+
+    // Do not start timers for viewers/editors or while loading
+    if (currentUser.role === "viewer" || currentUser.role === "editor") {
+      clearIdleTimer();
+      return;
+    }
+
+    lastActivityRef.current = Date.now();
+    lastRefreshRef.current = Date.now();
+
+    clearIdleTimer();
+    idleCheckIntervalRef.current = setInterval(async () => {
+      const now = Date.now();
+      const idleFor = now - lastActivityRef.current;
+
+      // Idle logout
+      if (idleFor >= IDLE_TIMEOUT_MS) {
+        await forceLogoutForIdle();
+        return;
+      }
+
+      // Token refresh while active
+      const needsRefresh = now - lastRefreshRef.current >= REFRESH_INTERVAL_MS;
+      if (needsRefresh && auth.currentUser) {
+        try {
+          await auth.currentUser.getIdToken(true);
+          lastRefreshRef.current = now;
+        } catch (err) {
+          if (import.meta.env.DEV)
+            console.warn("[Auth] Token refresh failed, logging out", err);
+          await forceLogoutForIdle();
+        }
+      }
+    }, IDLE_POLL_MS);
+
+    return () => {
+      clearIdleTimer();
+    };
+  }, [currentUser.role]);
+
+  // --- DETECT TOKEN EXPIRATION (Role Downgrade) ---
+  useEffect(() => {
+    // If we were logged in as manager/admin but are now viewer, token expired
+    const wasLoggedIn =
+      previousUserRoleRef.current === "manager" ||
+      previousUserRoleRef.current === "admin";
+    const isNowViewer = currentUser.role === "viewer";
+
+    if (wasLoggedIn && isNowViewer && loggedInName) {
+      // Token expired - clear storage and prompt re-login
+      sessionStorage.removeItem("firebaseToken");
+      setTokenExpiredMsg(
+        "Your session expired. Please log in again to continue as manager/admin."
+      );
+      setLoginModalOpen(true);
+      setLoggedInName("");
+      setLoggedInUserId(0);
+    }
+  }, [currentUser.role, loggedInName]);
 
   // --- SAVE TO FIREBASE (Debounced) ---
   useEffect(() => {
@@ -1519,6 +1642,9 @@ const ShiftScheduler = () => {
   const handleLoginSuccess = (role: RoleId, name: string, id: number) => {
     // Clear highlights when switching roles
     setSelectedDates([]);
+    setTokenExpiredMsg(""); // Clear expiration message on successful login
+    lastActivityRef.current = Date.now();
+    lastRefreshRef.current = Date.now();
     if (role === "manager") {
       setCurrentUser(ROLES.MANAGER);
       setFocusedEmployeeId(null);
@@ -1534,6 +1660,7 @@ const ShiftScheduler = () => {
       setCurrentUser(ROLES.VIEWER);
       setFocusedEmployeeId(null);
     }
+    previousUserRoleRef.current = role; // Update tracked role
     setLoggedInName(name);
     setLoggedInUserId(id);
   };
@@ -2593,6 +2720,7 @@ const ShiftScheduler = () => {
         onLoginSuccess={handleLoginSuccess}
         onTeamUpdate={setTeamState}
         t={t}
+        tokenExpiredMsg={tokenExpiredMsg}
       />
 
       <RequestsModal
