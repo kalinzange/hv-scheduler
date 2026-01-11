@@ -1019,6 +1019,7 @@ const ShiftScheduler = () => {
   const isRemoteUpdate = useRef(false);
   const canWriteRef = useRef(false);
   const isLoadingRef = useRef(true);
+  const dbRef = useRef<any>(null); // Store Firestore instance for consistent usage
 
   // ref to calendar scroll container and extra-days flag to append next-month days
   const calendarRef = useRef<HTMLDivElement | null>(null);
@@ -1133,6 +1134,8 @@ const ShiftScheduler = () => {
         const db = initializeFirestore(app, {
           experimentalForceLongPolling: true,
         });
+        // Store DB instance for use in other functions
+        dbRef.current = db;
 
         const initAuth = async () => {
           try {
@@ -1420,8 +1423,13 @@ const ShiftScheduler = () => {
     // Immediately save to Firebase
     if (FIREBASE_CONFIG.apiKey) {
       try {
+        const auth = getAuth();
+        // Refresh token to ensure it's still valid
+        await auth.currentUser?.getIdToken(true);
+
         const app = getApp();
-        const db = getFirestore(app);
+        const db = dbRef.current || getFirestore(app);
+        if (!dbRef.current) dbRef.current = db;
         const dataDocRef = doc(
           db,
           "artifacts",
@@ -1432,7 +1440,7 @@ const ShiftScheduler = () => {
           "global_state"
         );
 
-        await setDoc(dataDocRef, {
+        const publishData = {
           startDateStr,
           holidays,
           minStaff,
@@ -1448,13 +1456,26 @@ const ShiftScheduler = () => {
           team: teamState,
           requests,
           lastUpdated: Date.now(),
-        });
+        };
+
+        console.log(
+          "[Publish] Writing data with keys:",
+          Object.keys(publishData)
+        );
+
+        await setDoc(dataDocRef, publishData);
 
         setSaveStatus("saved");
-      } catch (err) {
-        if (import.meta.env.DEV) console.error("Publish Error:", err);
+      } catch (err: any) {
+        console.error("Publish Error:", {
+          code: err?.code,
+          message: err?.message,
+        });
         setSaveStatus("error");
       }
+    } else {
+      // No Firebase config, at least update local state
+      setSaveStatus("offline");
     }
   };
 

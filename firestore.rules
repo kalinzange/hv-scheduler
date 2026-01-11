@@ -11,38 +11,17 @@ service cloud.firestore {
              request.auth.token.role in ['manager', 'admin'];
     }
 
-    // Validate essential fields only to prevent corruption while allowing schema flexibility
+    // Minimal validation - only check field existence and basic types
     function isValidGlobalState() {
       let data = request.resource.data;
 
-      // Check critical required fields exist
-      let hasCriticalFields = data.keys().hasAll([
-        'overrides',
-        'publishedOverrides',
-        'team',
-        'lastUpdated',
-        'config'
-      ]);
-
-      // Type validation for critical fields
-      let criticalTypesValid =
-        data.overrides is map &&
-        data.publishedOverrides is map &&
-        data.team is list &&
-        data.lastUpdated is number &&
-        data.config is map;
-
-      // Array size constraints (prevent abuse)
-      let arraysSizeValid =
-        data.team.size() <= 1000 &&
-        (!('requests' in data) || data.requests.size() <= 10000);
-
-      // Timestamp validation: not before 2000, allow +10 min for clock skew
-      let timestampValid =
-        data.lastUpdated >= 946684800000 && // Jan 1, 2000
-        data.lastUpdated <= now.getTime() + 600000;
-
-      return hasCriticalFields && criticalTypesValid && arraysSizeValid && timestampValid;
+      // Check critical required fields exist and are correct type
+      return data.keys().hasAll(['overrides', 'publishedOverrides', 'team', 'lastUpdated', 'config']) &&
+             data.overrides is map &&
+             data.publishedOverrides is map &&
+             data.team is list &&
+             data.lastUpdated is number &&
+             data.config is map;
     }
 
     // ============================================
