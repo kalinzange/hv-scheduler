@@ -32,22 +32,26 @@ A modern, web-based shift scheduling application built with React, TypeScript, a
 ### Installation
 
 1. Clone the repository:
+
 ```bash
 git clone https://github.com/kalinzange/hv-scheduler.git
 cd hv-scheduler
 ```
 
 2. Install dependencies:
+
 ```bash
 npm install
 ```
 
 3. Create a `.env` file based on `.env.example`:
+
 ```bash
 cp .env.example .env
 ```
 
 4. Configure your Firebase credentials in the `.env` file:
+
 ```env
 VITE_FIREBASE_API_KEY=your_firebase_api_key
 VITE_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
@@ -59,25 +63,54 @@ VITE_APP_ID=your_app_identifier
 ```
 
 5. Start the development server:
+
 ```bash
 npm run dev
 ```
 
 ### Firebase Setup
 
-1. Deploy Firestore security rules:
+**Complete setup guide:** See [FIREBASE_FUNCTIONS_SUMMARY.md](FIREBASE_FUNCTIONS_SUMMARY.md) for overview or [FIREBASE_DEPLOYMENT_CHECKLIST.md](FIREBASE_DEPLOYMENT_CHECKLIST.md) for step-by-step instructions.
+
+**Quick Start:**
+
+1. Generate password hashes:
+
+```bash
+cd functions
+npm install
+node generate-hashes.js "YourManagerPassword" "YourAdminPassword"
+```
+
+2. Set Firebase secrets:
+
+```bash
+firebase functions:secrets:set MANAGER_PASS_HASH
+firebase functions:secrets:set ADMIN_PASS_HASH
+```
+
+3. Deploy Firestore security rules:
+
 ```bash
 firebase deploy --only firestore:rules
 ```
 
-2. Deploy Cloud Functions:
+4. Deploy Cloud Functions:
+
 ```bash
-cd functions
-npm install
-npm run build
-cd ..
 firebase deploy --only functions
 ```
+
+5. Update environment variables:
+   - Add `VITE_CLOUD_FUNCTION_URL` to `.env.local` for local development
+   - Add `VITE_CLOUD_FUNCTION_URL` to GitHub Secrets for production
+
+**Documentation:**
+
+- [FIREBASE_FUNCTIONS_SUMMARY.md](FIREBASE_FUNCTIONS_SUMMARY.md) - Overview and architecture
+- [FIREBASE_DEPLOYMENT_CHECKLIST.md](FIREBASE_DEPLOYMENT_CHECKLIST.md) - Complete deployment checklist
+- [FIREBASE_FUNCTIONS_SETUP.md](FIREBASE_FUNCTIONS_SETUP.md) - Detailed setup guide
+- [FIREBASE_QUICK_REFERENCE.md](FIREBASE_QUICK_REFERENCE.md) - Quick command reference
 
 ## User Roles
 
@@ -109,6 +142,7 @@ The application can be configured through the settings panel (Admin/Manager acce
 ## Development
 
 ### Project Structure
+
 ```
 hv-scheduler/
 ├── src/
@@ -123,11 +157,13 @@ hv-scheduler/
 ```
 
 ### Build for Production
+
 ```bash
 npm run build
 ```
 
 ### Linting
+
 ```bash
 npm run lint
 ```
@@ -153,6 +189,7 @@ For questions or issues, please open an issue on GitHub.
 ---
 
 **Note**: This application handles sensitive employee data. Ensure proper security measures are in place before deploying to production, including:
+
 - Strong password policies
 - Regular security audits
 - Proper Firebase security rules

@@ -1,8 +1,6 @@
 import * as functions from "firebase-functions";
-import * as admin from "firebase-admin";
 import * as bcrypt from "bcryptjs";
-
-admin.initializeApp();
+import { admin } from "./admin";
 
 interface LoginRequest {
   role: string;
@@ -130,14 +128,13 @@ export const roleLogin = functions.https.onRequest(
         return;
       }
 
-      // Get environment variables (hashed passwords)
-      const managerHashEnv = process.env.MANAGER_PASS_HASH;
-      const adminHashEnv = process.env.ADMIN_PASS_HASH;
+      // Get hashes from runtime config
+      const cfg = functions.config();
+      const managerHashEnv = cfg.auth?.manager_hash;
+      const adminHashEnv = cfg.auth?.admin_hash;
 
       if (!managerHashEnv || !adminHashEnv) {
-        functions.logger.error(
-          "Missing password hashes in environment configuration"
-        );
+        functions.logger.error("Missing password hashes in config");
         res
           .status(500)
           .json({ error: "Server configuration error" } as ErrorResponse);

@@ -2,8 +2,19 @@
 .env
 .env.local
 .env.*.local
+-PF5MFGVZ.env
 !.env.vault
 !.env.example
+.env.production
+.env.staging
+
+# Firebase
+.firebaserc
+functions/dist/
+functions/.env.production
+
+# GitHub
+.github/
 
 # Dependencies
 node_modules/
@@ -12,6 +23,10 @@ node_modules/
 dist/
 dist-ssr/
 *.local
+
+# Cache files
+.eslintcache
+.cache/
 
 # OS files
 .DS_Store
@@ -39,4 +54,3 @@ coverage/
 
 # Temporary files
 *.tmp
-.cache/
