@@ -46,6 +46,7 @@ import { initializeApp, getApp } from "firebase/app";
 import { getAuth, signInAnonymously } from "firebase/auth";
 import {
   getFirestore,
+  initializeFirestore,
   doc,
   setDoc,
   onSnapshot,
@@ -1129,7 +1130,9 @@ const ShiftScheduler = () => {
       try {
         const app = initializeApp(FIREBASE_CONFIG);
         const auth = getAuth(app);
-        const db = getFirestore(app);
+        const db = initializeFirestore(app, {
+          experimentalForceLongPolling: true,
+        });
 
         const initAuth = async () => {
           try {
