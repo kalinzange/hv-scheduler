@@ -1139,15 +1139,24 @@ const ShiftScheduler = () => {
             await signInAnonymously(auth);
             retryCountRef.current = 0; // Reset retry count on success
           } catch (authError: any) {
-            if (import.meta.env.DEV) {
-              console.error(
-                "[Firebase] Auth Error:",
-                authError?.code,
-                authError?.message
-              );
+            console.error("[Firebase] Auth Error - Please check console:", {
+              code: authError?.code,
+              message: authError?.message,
+              fullError: authError,
+            });
+            // Don't spam retries on permanent errors
+            const permanentErrors = [
+              "auth/operation-not-allowed",
+              "auth/invalid-api-key",
+              "auth/app-deleted",
+              "auth/invalid-user-token",
+            ];
+            if (!permanentErrors.includes(authError?.code)) {
+              scheduleRetry();
+            } else {
+              setIsLoading(false);
+              setSaveStatus("offline");
             }
-            // Retry after delay
-            scheduleRetry();
           }
         };
         initAuth();
