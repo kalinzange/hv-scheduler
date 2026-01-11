@@ -26,12 +26,11 @@ function checkRateLimit(ip: string): { allowed: boolean; message?: string } {
   const attempt = attemptCache.get(ip);
 
   if (!attempt) {
-    attemptCache.set(ip, { count: 1, resetTime: now + LOCKOUT_DURATION_MS });
     return { allowed: true };
   }
 
   if (now > attempt.resetTime) {
-    attemptCache.set(ip, { count: 1, resetTime: now + LOCKOUT_DURATION_MS });
+    attemptCache.delete(ip);
     return { allowed: true };
   }
 
@@ -44,8 +43,18 @@ function checkRateLimit(ip: string): { allowed: boolean; message?: string } {
     };
   }
 
-  attempt.count++;
   return { allowed: true };
+}
+
+function recordFailedAttempt(ip: string): void {
+  const now = Date.now();
+  const attempt = attemptCache.get(ip);
+
+  if (!attempt || now > attempt.resetTime) {
+    attemptCache.set(ip, { count: 1, resetTime: now + LOCKOUT_DURATION_MS });
+  } else {
+    attempt.count++;
+  }
 }
 
 export const roleLogin = functions.https.onRequest(
@@ -77,15 +86,6 @@ export const roleLogin = functions.https.onRequest(
           ?.trim() ||
         req.socket.remoteAddress ||
         "unknown";
-
-      // Check rate limiting
-      const rateLimitCheck = checkRateLimit(clientIp);
-      if (!rateLimitCheck.allowed) {
-        res.status(429).json({
-          error: rateLimitCheck.message || "Too many login attempts",
-        } as ErrorResponse);
-        return;
-      }
 
       // Parse and validate request body
       let body: unknown;
@@ -161,6 +161,16 @@ export const roleLogin = functions.https.onRequest(
 
       // Authentication failed
       if (!isValid) {
+        // Check if already rate-limited before recording new attempt
+        const rateLimitCheck = checkRateLimit(clientIp);
+        if (!rateLimitCheck.allowed) {
+          res.status(429).json({
+            error: rateLimitCheck.message || "Too many login attempts",
+          } as ErrorResponse);
+          return;
+        }
+
+        recordFailedAttempt(clientIp);
         functions.logger.warn(
           `Failed login attempt for role: ${role} from IP: ${clientIp}`
         );
@@ -174,6 +184,9 @@ export const roleLogin = functions.https.onRequest(
         role: grantedRole,
         loginTime: Date.now(),
       });
+
+      // Clear failed attempts on successful login
+      attemptCache.delete(clientIp);
 
       functions.logger.info(
         `Successful ${grantedRole} login from IP: ${clientIp}`

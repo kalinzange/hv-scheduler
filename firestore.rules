@@ -15,7 +15,7 @@ service cloud.firestore {
     function isValidGlobalState() {
       let data = request.resource.data;
 
-      // All required fields must be present
+      // All required fields must be present (lastPublished is optional, can be null or missing)
       let hasAllFields = data.keys().hasAll([
         'startDateStr',
         'holidays',
@@ -30,8 +30,7 @@ service cloud.firestore {
         'hoursConfig',
         'team',
         'requests',
-        'lastUpdated',
-        'lastPublished'
+        'lastUpdated'
       ]);
 
       // Type validation
@@ -50,7 +49,7 @@ service cloud.firestore {
         data.team is list &&
         data.requests is list &&
         data.lastUpdated is number &&
-        (data.lastPublished is number || data.lastPublished == null);
+        (!('lastPublished' in data) || data.lastPublished is number || data.lastPublished == null);
 
       // String length constraints
       let stringsValid =

@@ -1016,6 +1016,8 @@ const ShiftScheduler = () => {
 
   // Ref to prevent infinite loops between Firebase sync and local save
   const isRemoteUpdate = useRef(false);
+  const canWriteRef = useRef(false);
+  const isLoadingRef = useRef(true);
 
   // ref to calendar scroll container and extra-days flag to append next-month days
   const calendarRef = useRef<HTMLDivElement | null>(null);
@@ -1027,6 +1029,10 @@ const ShiftScheduler = () => {
   const canWrite = currentUser.permissions.includes("write");
   const canAccessSettings = currentUser.role === "manager";
   const isManager = currentUser.role === "manager";
+
+  // Update refs whenever these values change so snapshot listener always has current values
+  canWriteRef.current = canWrite;
+  isLoadingRef.current = isLoading;
 
   const [roleFilter, setRoleFilter] = useState("All");
   const [langFilter, setLangFilter] = useState("All");
@@ -1176,10 +1182,21 @@ const ShiftScheduler = () => {
             if (docSnap.exists()) {
               if (import.meta.env.DEV)
                 console.log("[Firebase] Document found. Loading data...");
-              // Mark this update as coming from the cloud to prevent immediate re-save
-              isRemoteUpdate.current = true;
 
               const data = docSnap.data();
+
+              // For write-enabled users (managers), only load on initial mount
+              // and don't listen to updates (prevents overwriting local edits)
+              if (!isLoadingRef.current && canWriteRef.current) {
+                if (import.meta.env.DEV)
+                  console.log(
+                    "[Firebase] Skipping remote update for editing user"
+                  );
+                return; // Don't process any data for editing users after initial load
+              }
+
+              // Mark this update as coming from the cloud to prevent immediate re-save
+              isRemoteUpdate.current = true;
 
               // Batch state updates to reduce re-renders
               if (data.startDateStr) setStartDateStr(data.startDateStr);
@@ -1199,6 +1216,7 @@ const ShiftScheduler = () => {
               if (data.publishedOverrides) {
                 setPublishedOverrides(data.publishedOverrides);
               } else if (data.overrides) {
+                // Initialize publishedOverrides with overrides on first load
                 setPublishedOverrides(data.overrides);
               }
               if (data.lastPublished) setLastPublished(data.lastPublished);
@@ -1225,15 +1243,20 @@ const ShiftScheduler = () => {
             if (!isComponentMounted) return;
 
             if (import.meta.env.DEV)
-              console.error("[Firebase] Read Error:", {
+              console.error("[Firebase] Snapshot Listener Error:", {
                 code: error.code,
                 message: error.message,
                 details: error,
               });
-            // Allow offline mode fallback
-            setInitError(false);
-            setIsLoading(false);
-            setSaveStatus("offline");
+
+            // Don't set offline on every error - only on initial load failure
+            // Otherwise the save effect's status gets overwritten
+            if (isLoadingRef.current) {
+              setInitError(false);
+              setIsLoading(false);
+              setSaveStatus("offline");
+            }
+
             if (import.meta.env.DEV)
               console.warn(
                 "[Firebase] Running in offline mode. Changes will be saved locally."
@@ -1301,8 +1324,15 @@ const ShiftScheduler = () => {
 
   // --- SAVE TO FIREBASE (Debounced) ---
   useEffect(() => {
-    if (isLoading || initError) return; // TRAVA DE SEGURANÇA: Não grava se estiver a carregar ou se houve erro ao ler
-    if (!FIREBASE_CONFIG.apiKey) return;
+    if (isLoading || initError) return;
+    if (!FIREBASE_CONFIG.apiKey || !APP_ID) {
+      if (import.meta.env.DEV)
+        console.log("[Save] Missing config:", {
+          apiKey: !!FIREBASE_CONFIG.apiKey,
+          appId: !!APP_ID,
+        });
+      return;
+    }
 
     // If the change came from a remote snapshot, reset the flag and DO NOT save back
     if (isRemoteUpdate.current) {
@@ -1316,54 +1346,64 @@ const ShiftScheduler = () => {
     }
 
     setSaveStatus("saving");
-    try {
-      const app = getApp(); // Usa a app já inicializada em vez de reinicializar
-      const db = getFirestore(app);
-      const dataDocRef = doc(
-        db,
-        "artifacts",
-        APP_ID,
-        "public",
-        "data",
-        "shift_scheduler",
-        "global_state"
-      );
 
-      const saveData = async () => {
+    const saveData = async () => {
+      try {
+        let app;
         try {
-          await setDoc(dataDocRef, {
-            startDateStr,
-            holidays,
-            minStaff,
-            requiredLangs,
-            weekendDays,
-            legends,
-            colors,
-            overrides,
-            publishedOverrides,
-            lastPublished,
-            config,
-            hoursConfig,
-            team: teamState,
-            requests,
-            lastUpdated: Date.now(),
-          });
-          setSaveStatus("saved");
-        } catch (err) {
-          if (import.meta.env.DEV) console.error("Firebase Save Error:", err);
-          setSaveStatus("error");
+          app = getApp();
+        } catch {
+          app = initializeApp(FIREBASE_CONFIG);
         }
-      };
 
-      const timer = setTimeout(saveData, 2000);
-      return () => clearTimeout(timer);
-    } catch (err) {
-      if (import.meta.env.DEV)
-        console.error(
-          "Firebase not initialized yet, will retry on next change"
+        const db = getFirestore(app);
+        const dataDocRef = doc(
+          db,
+          "artifacts",
+          APP_ID,
+          "public",
+          "data",
+          "shift_scheduler",
+          "global_state"
         );
-      setSaveStatus("offline");
-    }
+
+        if (import.meta.env.DEV)
+          console.log("[Save] Attempting to save data...");
+
+        await setDoc(dataDocRef, {
+          startDateStr,
+          holidays,
+          minStaff,
+          requiredLangs,
+          weekendDays,
+          legends,
+          colors,
+          overrides,
+          publishedOverrides,
+          lastPublished: lastPublished || null,
+          config,
+          hoursConfig,
+          team: teamState,
+          requests,
+          lastUpdated: Date.now(),
+        });
+
+        if (import.meta.env.DEV) console.log("[Save] Successfully saved");
+        setSaveStatus("saved");
+      } catch (err: any) {
+        if (import.meta.env.DEV) {
+          console.error("[Save] Firebase error:", {
+            code: err?.code,
+            message: err?.message,
+            error: err,
+          });
+        }
+        setSaveStatus("error");
+      }
+    };
+
+    const timer = setTimeout(saveData, 2000);
+    return () => clearTimeout(timer);
   }, [
     startDateStr,
     holidays,
@@ -1373,8 +1413,6 @@ const ShiftScheduler = () => {
     legends,
     colors,
     overrides,
-    publishedOverrides,
-    lastPublished,
     config,
     hoursConfig,
     teamState,
@@ -1394,10 +1432,53 @@ const ShiftScheduler = () => {
     }
   };
 
-  const handlePublish = () => {
-    setPublishedOverrides({ ...overrides });
-    setLastPublished(Date.now());
+  const handlePublish = async () => {
+    const newPublishedOverrides = { ...overrides };
+    const newLastPublished = Date.now();
+
+    setPublishedOverrides(newPublishedOverrides);
+    setLastPublished(newLastPublished);
     setHasUnpublishedChanges(false);
+
+    // Immediately save to Firebase
+    if (FIREBASE_CONFIG.apiKey) {
+      try {
+        const app = getApp();
+        const db = getFirestore(app);
+        const dataDocRef = doc(
+          db,
+          "artifacts",
+          APP_ID,
+          "public",
+          "data",
+          "shift_scheduler",
+          "global_state"
+        );
+
+        await setDoc(dataDocRef, {
+          startDateStr,
+          holidays,
+          minStaff,
+          requiredLangs,
+          weekendDays,
+          legends,
+          colors,
+          overrides,
+          publishedOverrides: newPublishedOverrides,
+          lastPublished: newLastPublished,
+          config,
+          hoursConfig,
+          team: teamState,
+          requests,
+          lastUpdated: Date.now(),
+        });
+
+        setSaveStatus("saved");
+      } catch (err) {
+        if (import.meta.env.DEV) console.error("Publish Error:", err);
+        setSaveStatus("error");
+      }
+    }
   };
 
   // Login Handling
@@ -2736,7 +2817,7 @@ const ShiftScheduler = () => {
           </div>
         </div>
 
-        {/* Viewer notice when nothing is published */}
+        {/* Viewer notice when showing draft (unpublished) schedule */}
         {!isManager && Object.keys(publishedOverrides).length === 0 && (
           <div className="px-2 sm:px-3 md:px-4 py-1 bg-amber-50 text-amber-800 border-t border-b border-amber-200 text-xs">
             No published schedule yet. Please contact a manager to publish.
