@@ -25,7 +25,6 @@ import {
   RefreshCw,
   AlertCircle,
   Shield,
-  Lock,
   Eye,
   Edit3,
   Inbox,
@@ -1054,6 +1053,11 @@ const ShiftScheduler = () => {
   const [shiftFilter, setShiftFilter] = useState("All");
   const [sortOrder, setSortOrder] = useState("AZ");
   const [focusedDate, setFocusedDate] = useState<string | null>(null);
+  const [mobileRoleDropdownOpen, setMobileRoleDropdownOpen] = useState(false);
+  const [mobileFilterRoleOpen, setMobileFilterRoleOpen] = useState(false);
+  const [mobileFilterLangOpen, setMobileFilterLangOpen] = useState(false);
+  const [mobileFilterShiftOpen, setMobileFilterShiftOpen] = useState(false);
+  const [mobileFilterSortOpen, setMobileFilterSortOpen] = useState(false);
   const [focusedEmployeeId, setFocusedEmployeeId] = useState<number | null>(
     null
   );
@@ -2561,10 +2565,6 @@ const ShiftScheduler = () => {
     [teamState]
   );
   const pendingCount = requests.filter((r) => r.status === "PENDING").length;
-  const calendarHeight =
-    currentUser.role === "editor"
-      ? "calc(100vh - 140px)"
-      : "calc(100vh - 140px)";
 
   // Show error screen only if truly critical (not just offline mode)
   if (initError) {
@@ -2620,15 +2620,123 @@ const ShiftScheduler = () => {
       )}
 
       {/* --- BARRA DE PERMISSÕES & CLOUD --- */}
-      <div className="bg-slate-900 text-white p-2 shadow-lg z-30 print:hidden flex justify-between items-center px-6">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Shield className="w-4 h-4 text-emerald-400" />
-            <span className="font-semibold text-xs uppercase tracking-wide">
-              Access Mode:
-            </span>
+      <div className="bg-slate-900 text-white p-2 shadow-lg z-30 print:hidden flex flex-col md:flex-row justify-between items-start md:items-center px-4 md:px-6 gap-2">
+        <div className="flex flex-col md:flex-row items-start md:items-center gap-2 md:gap-4 w-full md:w-auto">
+          <div className="flex items-center gap-2 md:gap-4 w-full md:w-auto justify-between">
+            <div className="flex items-center gap-2 md:gap-4">
+              <div className="flex items-center gap-2">
+                <Shield className="w-4 h-4 text-emerald-400" />
+                <span className="text-xs uppercase tracking-wide">
+                  Access Mode:
+                </span>
+              </div>
+              {/* Mobile: Custom Dropdown - inline with label */}
+              <div className="md:hidden relative">
+                <button
+                  onClick={() =>
+                    setMobileRoleDropdownOpen(!mobileRoleDropdownOpen)
+                  }
+                  className="flex items-center gap-1 bg-gradient-to-br from-emerald-600 to-emerald-700 text-white border border-emerald-500 rounded px-2 py-0.5 text-[11px] font-normal shadow-sm hover:shadow-md transition-all min-w-[90px] justify-between"
+                >
+                  <span className="truncate">
+                    {
+                      ROLES[
+                        Object.keys(ROLES).find(
+                          (k) =>
+                            ROLES[k as keyof typeof ROLES].id === currentUser.id
+                        ) as keyof typeof ROLES
+                      ]?.label
+                    }
+                  </span>
+                  <ChevronRight
+                    size={10}
+                    className={`transition-transform flex-shrink-0 ${
+                      mobileRoleDropdownOpen ? "rotate-90" : ""
+                    }`}
+                  />
+                </button>
+                {mobileRoleDropdownOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setMobileRoleDropdownOpen(false)}
+                    />
+                    <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50 min-w-[140px]">
+                      {Object.keys(ROLES).map((key) => {
+                        const role = ROLES[key as keyof typeof ROLES];
+                        const isActive = currentUser.id === role.id;
+                        return (
+                          <button
+                            key={role.id}
+                            onClick={() => {
+                              if (!isActive) {
+                                initiateLogin(key);
+                              }
+                              setMobileRoleDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-3 py-2 text-xs font-medium transition-colors flex items-center gap-2 ${
+                              isActive
+                                ? "bg-emerald-50 text-emerald-700"
+                                : "text-gray-700 hover:bg-gray-50"
+                            }`}
+                          >
+                            {role.id === "viewer" && <Eye size={12} />}
+                            {role.id === "editor" && <Edit3 size={12} />}
+                            {role.id === "manager" && <Shield size={12} />}
+                            {role.id === "admin" && <ShieldAlert size={12} />}
+                            {role.label}
+                            {isActive && (
+                              <CheckCircle size={12} className="ml-auto" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+            {/* Cloud Status - Mobile on same row */}
+            <div className="md:hidden">
+              <div
+                className={`flex items-center gap-2 text-xs px-3 py-1 rounded-full border transition-colors ${
+                  saveStatus === "saved"
+                    ? "bg-green-900/30 border-green-700 text-green-300"
+                    : saveStatus === "saving"
+                    ? "bg-yellow-900/30 border-yellow-700 text-yellow-300"
+                    : saveStatus === "offline"
+                    ? "bg-orange-900/30 border-orange-700 text-orange-300 hover:bg-orange-900/50 cursor-help"
+                    : "bg-red-900/30 border-red-700 text-red-300"
+                }`}
+                title={
+                  saveStatus === "offline"
+                    ? "Clique para tentar reconectar"
+                    : undefined
+                }
+                onClick={
+                  saveStatus === "offline"
+                    ? () => {
+                        if (import.meta.env.DEV)
+                          console.log(
+                            "[User Action] Attempting manual reconnection"
+                          );
+                        window.location.reload();
+                      }
+                    : undefined
+                }
+              >
+                {saveStatus === "saved" && <Cloud size={14} />}
+                {saveStatus === "saving" && (
+                  <RefreshCw size={14} className="animate-spin" />
+                )}
+                {(saveStatus === "error" || saveStatus === "offline") && (
+                  <CloudOff size={14} />
+                )}
+              </div>
+            </div>
           </div>
-          <div className="flex bg-slate-800 rounded-lg p-0.5 gap-1">
+          {/* Desktop: Buttons */}
+          <div className="hidden md:flex bg-slate-800 rounded-lg p-0.5 gap-1">
             {Object.keys(ROLES).map((key) => {
               const role = ROLES[key as keyof typeof ROLES];
               const isActive = currentUser.id === role.id;
@@ -2656,7 +2764,7 @@ const ShiftScheduler = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="hidden md:flex flex-col md:flex-row items-start md:items-center gap-2 md:gap-4 w-full md:w-auto">
           {/* Cloud Status */}
           <div
             className={`flex items-center gap-2 text-xs px-3 py-1 rounded-full border transition-colors ${
@@ -2769,11 +2877,11 @@ const ShiftScheduler = () => {
       />
 
       {/* Header */}
-      <div className="bg-white border-b flex flex-col shadow-sm z-20 print:hidden flex-shrink-0">
+      <div className="bg-white flex flex-col shadow-sm z-20 print:hidden flex-shrink-0">
         {/* Top Row: Title & Actions */}
-        <div className="px-2 sm:px-3 md:px-4 py-0.5 md:py-1 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 md:gap-0">
+        <div className="px-2 sm:px-3 md:px-4 py-0.5 md:py-1 md:border-b flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 md:gap-0">
           <div>
-            <h1 className="text-xs sm:text-sm md:text-base font-bold text-gray-800">
+            <h1 className="text-sm sm:text-base md:text-lg font-bold text-gray-800 leading-tight">
               {t.title}
             </h1>
           </div>
@@ -2841,38 +2949,38 @@ const ShiftScheduler = () => {
 
             <button
               onClick={() => setShowAnnual(true)}
-              className="flex items-center px-3 py-2 bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition border border-blue-200"
+              className="hidden md:flex items-center px-3 py-2 bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition border border-blue-200"
             >
               <Calendar size={16} className="mr-2" /> {t.annual}
             </button>
             <button
               onClick={() => setShowStats(true)}
-              className="flex items-center px-3 py-2 bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100 transition border border-indigo-200"
+              className="hidden md:flex items-center px-3 py-2 bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100 transition border border-indigo-200"
             >
               <BarChart3 size={16} className="mr-2" /> {t.stats}
             </button>
             <button
               onClick={handleExportCSV}
-              className="flex items-center px-3 py-2 bg-green-50 text-green-700 rounded hover:bg-green-100 transition border border-green-200"
+              className="hidden md:flex items-center px-3 py-2 bg-green-50 text-green-700 rounded hover:bg-green-100 transition border border-green-200"
             >
               <Download size={16} className="mr-2" /> {t.exportCsv}
             </button>
             <button
               onClick={() => window.print()}
-              className="flex items-center px-3 py-2 bg-gray-50 text-gray-700 rounded hover:bg-gray-100 transition border border-gray-200"
+              className="hidden md:flex items-center px-3 py-2 bg-gray-50 text-gray-700 rounded hover:bg-gray-100 transition border border-gray-200"
             >
               <Printer size={16} className="mr-2" /> {t.print}
             </button>
             <button
               onClick={() => handleExportImage("png")}
-              className="flex items-center px-3 py-2 bg-sky-50 text-sky-700 rounded hover:bg-sky-100 transition border border-sky-200"
+              className="hidden md:flex items-center px-3 py-2 bg-sky-50 text-sky-700 rounded hover:bg-sky-100 transition border border-sky-200"
               title="Export as PNG"
             >
               <Download size={16} className="mr-2" /> PNG
             </button>
             <button
               onClick={() => handleExportImage("jpeg")}
-              className="flex items-center px-3 py-2 bg-rose-50 text-rose-700 rounded hover:bg-rose-100 transition border border-rose-200"
+              className="hidden md:flex items-center px-3 py-2 bg-rose-50 text-rose-700 rounded hover:bg-rose-100 transition border border-rose-200"
               title="Export as JPEG"
             >
               <Download size={16} className="mr-2" /> JPEG
@@ -2937,10 +3045,10 @@ const ShiftScheduler = () => {
               </>
             )}
 
-            {canAccessSettings ? (
+            {canAccessSettings && (
               <button
                 onClick={() => setShowConfig(!showConfig)}
-                className={`flex items-center px-3 py-2 rounded transition ${
+                className={`hidden md:flex items-center px-3 py-2 rounded transition ${
                   showConfig
                     ? "bg-indigo-100 text-indigo-800"
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
@@ -2948,13 +3056,6 @@ const ShiftScheduler = () => {
               >
                 <Settings size={16} className="mr-2" /> {t.config}
               </button>
-            ) : (
-              <div
-                className="flex items-center px-3 py-2 rounded bg-gray-50 text-gray-300 cursor-not-allowed border border-transparent"
-                title={t.permissionDenied}
-              >
-                <Lock size={16} className="mr-2" /> {t.config}
-              </div>
             )}
 
             {currentUser.permissions.includes("system") ? (
@@ -2980,7 +3081,277 @@ const ShiftScheduler = () => {
         )}
 
         {/* Bottom Row: Filters & Nav */}
-        <div className="px-2 sm:px-3 md:px-4 py-0.5 bg-gray-50 border-t flex flex-col md:flex-row justify-between items-start md:items-center gap-0.5 md:gap-0 overflow-x-auto">
+        {/* Mobile Filters - Custom Dropdowns */}
+        <div className="md:hidden px-2 py-2 bg-gray-50 border-t flex flex-col gap-2 relative z-50 filter-container">
+          <div className="flex items-center gap-1">
+            {/* Role Filter - Custom Dropdown */}
+            <div className="relative flex-1">
+              <button
+                onClick={() => setMobileFilterRoleOpen(!mobileFilterRoleOpen)}
+                className="w-full flex items-center justify-between gap-1 bg-white border border-gray-300 rounded px-2 py-1 text-xs font-normal shadow-sm hover:shadow-md transition-all"
+                style={{ color: "#374151" }}
+              >
+                <span className="truncate">
+                  {roleFilter === "All" ? "All Roles" : roleFilter}
+                </span>
+                <ChevronRight
+                  size={10}
+                  className={`flex-shrink-0 transition-transform ${
+                    mobileFilterRoleOpen ? "rotate-90" : ""
+                  }`}
+                />
+              </button>
+              {mobileFilterRoleOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setMobileFilterRoleOpen(false)}
+                  />
+                  <div className="absolute top-full left-0 mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-[9999] min-w-[110px] w-56">
+                    {["All Roles", ...roles].map((r) => (
+                      <button
+                        key={r}
+                        onClick={() => {
+                          setRoleFilter(r === "All Roles" ? "All" : r);
+                          setMobileFilterRoleOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-1.5 text-xs font-normal transition-colors flex items-center gap-2 ${
+                          (roleFilter === "All" && r === "All Roles") ||
+                          roleFilter === r
+                            ? "bg-blue-50 text-blue-700"
+                            : "text-gray-700 hover:bg-gray-50"
+                        }`}
+                      >
+                        {r}
+                        {roleFilter === r && (
+                          <CheckCircle size={10} className="ml-auto" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Language Filter - Custom Dropdown */}
+            <div className="relative flex-1">
+              <button
+                onClick={() => setMobileFilterLangOpen(!mobileFilterLangOpen)}
+                className="w-full flex items-center justify-between gap-1 bg-white border border-gray-300 rounded px-2 py-1 text-xs font-normal shadow-sm hover:shadow-md transition-all"
+                style={{ color: "#374151" }}
+              >
+                <span className="truncate">
+                  {langFilter === "All" ? "All Languages" : langFilter}
+                </span>
+                <ChevronRight
+                  size={10}
+                  className={`flex-shrink-0 transition-transform ${
+                    mobileFilterLangOpen ? "rotate-90" : ""
+                  }`}
+                />
+              </button>
+              {mobileFilterLangOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setMobileFilterLangOpen(false)}
+                  />
+                  <div className="absolute top-full left-0 mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-[9999] min-w-[110px] w-56">
+                    {["All Languages", ...ALL_LANGUAGES].map((l) => (
+                      <button
+                        key={l}
+                        onClick={() => {
+                          setLangFilter(l === "All Languages" ? "All" : l);
+                          setMobileFilterLangOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-1.5 text-xs font-normal transition-colors flex items-center gap-2 ${
+                          (langFilter === "All" && l === "All Languages") ||
+                          langFilter === l
+                            ? "bg-blue-50 text-blue-700"
+                            : "text-gray-700 hover:bg-gray-50"
+                        }`}
+                      >
+                        {l}
+                        {langFilter === l && (
+                          <CheckCircle size={10} className="ml-auto" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1">
+            {/* Shift Filter - Custom Dropdown */}
+            <div className="relative flex-1">
+              <button
+                onClick={() => setMobileFilterShiftOpen(!mobileFilterShiftOpen)}
+                className="w-full flex items-center justify-between gap-1 bg-white border border-gray-300 rounded px-2 py-1 text-xs font-normal shadow-sm hover:shadow-md transition-all"
+                style={{ color: "#374151" }}
+              >
+                <span className="truncate">
+                  {shiftFilter === "All"
+                    ? "All Shifts"
+                    : shiftFilter === "M"
+                    ? "Morning"
+                    : shiftFilter === "T"
+                    ? "Afternoon"
+                    : "Night"}
+                </span>
+                <ChevronRight
+                  size={10}
+                  className={`flex-shrink-0 transition-transform ${
+                    mobileFilterShiftOpen ? "rotate-90" : ""
+                  }`}
+                />
+              </button>
+              {mobileFilterShiftOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setMobileFilterShiftOpen(false)}
+                  />
+                  <div className="absolute top-full left-0 mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-[9999] min-w-[130px] w-56">
+                    {[
+                      { val: "All", label: "All Shifts" },
+                      { val: "M", label: "Morning (M)" },
+                      { val: "T", label: "Afternoon (T)" },
+                      { val: "N", label: "Night (N)" },
+                    ].map((s) => (
+                      <button
+                        key={s.val}
+                        onClick={() => {
+                          setShiftFilter(s.val);
+                          setMobileFilterShiftOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-1.5 text-xs font-normal transition-colors flex items-center gap-2 ${
+                          shiftFilter === s.val
+                            ? "bg-blue-50 text-blue-700"
+                            : "text-gray-700 hover:bg-gray-50"
+                        }`}
+                      >
+                        {s.label}
+                        {shiftFilter === s.val && (
+                          <CheckCircle size={10} className="ml-auto" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Sort Filter - Custom Dropdown */}
+            <div className="relative flex-1">
+              <button
+                onClick={() => setMobileFilterSortOpen(!mobileFilterSortOpen)}
+                className="w-full flex items-center justify-between gap-1 bg-white border border-gray-300 rounded px-2 py-1 text-xs font-normal shadow-sm hover:shadow-md transition-all"
+                style={{ color: "#374151" }}
+              >
+                <span className="truncate">
+                  {sortOrder === "OFFSET"
+                    ? t.sortDefault
+                    : sortOrder === "AZ"
+                    ? t.sortAZ
+                    : sortOrder === "ZA"
+                    ? t.sortZA
+                    : sortOrder === "LANG"
+                    ? t.sortLang
+                    : t.sortRole}
+                </span>
+                <ChevronRight
+                  size={10}
+                  className={`flex-shrink-0 transition-transform ${
+                    mobileFilterSortOpen ? "rotate-90" : ""
+                  }`}
+                />
+              </button>
+              {mobileFilterSortOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setMobileFilterSortOpen(false)}
+                  />
+                  <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50 min-w-[130px]">
+                    {[
+                      { val: "OFFSET", label: t.sortDefault },
+                      { val: "AZ", label: t.sortAZ },
+                      { val: "ZA", label: t.sortZA },
+                      { val: "LANG", label: t.sortLang },
+                      { val: "ROLE", label: t.sortRole },
+                    ].map((s) => (
+                      <button
+                        key={s.val}
+                        onClick={() => {
+                          setSortOrder(s.val);
+                          setMobileFilterSortOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-1.5 text-xs font-normal transition-colors flex items-center gap-2 ${
+                          sortOrder === s.val
+                            ? "bg-blue-50 text-blue-700"
+                            : "text-gray-700 hover:bg-gray-50"
+                        }`}
+                      >
+                        {s.label}
+                        {sortOrder === s.val && (
+                          <CheckCircle size={10} className="ml-auto" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center bg-white border rounded-lg shadow-sm">
+              <button
+                onClick={handlePrevMonth}
+                className="p-1.5 hover:bg-gray-100 rounded-l-lg"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <div className="px-4 font-semibold text-xs flex items-center justify-center gap-2">
+                <Calendar size={14} />
+                {monthLabel}
+              </div>
+              <button
+                onClick={handleNextMonth}
+                className="p-1.5 hover:bg-gray-100 rounded-r-lg"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+            {selectedDates.length > 0 && (
+              <button
+                onClick={() => setSelectedDates([])}
+                style={{
+                  background: "#92400e",
+                  color: "white",
+                  border: "1px solid #78350f",
+                  borderRadius: "0.375rem",
+                  padding: "0.375rem 0.75rem",
+                  fontSize: "0.75rem",
+                  fontWeight: "normal",
+                  boxShadow: "0 1px 2px rgba(0, 0, 0, 0.05)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.25rem",
+                  cursor: "pointer",
+                  transition: "box-shadow 150ms ease-in-out",
+                }}
+              >
+                <X size={11} />
+                Clear ({selectedDates.length})
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Desktop Filters - Original Layout */}
+        <div className="hidden md:flex px-2 sm:px-3 md:px-4 py-0.5 bg-gray-50 border-t flex-col md:flex-row justify-between items-start md:items-center gap-0.5 md:gap-0 overflow-x-auto">
           <div className="flex items-center gap-2 md:gap-4 flex-wrap text-[10px] md:text-xs">
             <div className="flex items-center gap-1 md:gap-2 hidden sm:flex">
               <Filter size={12} className="md:w-4 md:h-4" />
@@ -3080,6 +3451,9 @@ const ShiftScheduler = () => {
 
             {/* Shift radio group */}
             <div className="flex items-center gap-2">
+              <div className="text-xs font-semibold text-gray-600 mr-2">
+                Shifts:
+              </div>
               <label
                 className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border ${
                   shiftFilter === "All"
@@ -3243,10 +3617,26 @@ const ShiftScheduler = () => {
             {focusedDate && (
               <button
                 onClick={() => setFocusedDate(null)}
-                className="text-xs text-gray-500 hover:text-gray-700"
+                style={{
+                  background:
+                    "linear-gradient(to bottom right, #ef4444, #dc2626)",
+                  color: "white",
+                  border: "1px solid #f87171",
+                  borderRadius: "0.5rem",
+                  padding: "0.5rem 0.75rem",
+                  fontSize: "0.75rem",
+                  fontWeight: "500",
+                  boxShadow: "0 1px 2px rgba(0, 0, 0, 0.05)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.25rem",
+                  cursor: "pointer",
+                  transition: "box-shadow 150ms ease-in-out",
+                }}
                 title="Clear focus"
               >
-                ✕
+                <X size={12} />
+                Clear
               </button>
             )}
           </div>
@@ -3258,7 +3648,7 @@ const ShiftScheduler = () => {
         <AdminPanel show={showAdmin} team={teamState} setTeam={setTeamState} />
 
         <ConfigPanel
-          show={showConfig}
+          show={canAccessSettings && showConfig}
           config={config}
           setConfig={setConfig}
           team={teamState}
@@ -3283,12 +3673,7 @@ const ShiftScheduler = () => {
 
         <div
           ref={calendarRef}
-          className="w-full overflow-auto print:overflow-visible"
-          style={{
-            height: calendarHeight,
-            minHeight: calendarHeight,
-            maxHeight: calendarHeight,
-          }}
+          className="calendar-container print:overflow-visible"
         >
           <div className="hidden print:block mb-4">
             <h1 className="text-2xl font-bold">
@@ -3299,10 +3684,10 @@ const ShiftScheduler = () => {
             </p>
           </div>
 
-          <table className="w-full h-full border-collapse text-[10px] sm:text-xs print:text-[8px]">
+          <table className="w-full h-full border-collapse text-base sm:text-sm print:text-[8px]">
             <thead className="bg-gray-100 sticky top-0 z-10 shadow-sm print:static">
               <tr>
-                <th className="p-1 md:p-1.5 text-left border-b border-r min-w-[140px] md:min-w-[200px] bg-gray-50 sticky left-0 z-20 shadow-sm print:static print:bg-white print:border-black">
+                <th className="p-1 md:p-1.5 text-left border-b border-r min-w-[140px] md:min-w-[200px] bg-gray-100 sticky left-0 z-20 shadow-sm print:static print:bg-white print:border-black">
                   <div className="flex items-center gap-1 md:gap-2">
                     {t.colaborador}
                     {sortOrder === "AZ" && (
@@ -3399,18 +3784,21 @@ const ShiftScheduler = () => {
                             setSelectedDates([day.fullDate]);
                             setLastSelectedDate(day.fullDate);
                           }
-                          setFocusedDate(null);
+                          // Clear focus only on desktop
+                          if (window.innerWidth >= 768) {
+                            setFocusedDate(null);
+                          }
                         }
                       }}
-                      className={`p-0 md:p-0.5 border-b min-w-[24px] md:min-w-[30px] text-center relative cursor-pointer transition-all ${
+                      className={`p-1 md:p-1.5 border-b min-w-[40px] md:min-w-[48px] text-center relative cursor-pointer transition-all ${
                         !isWeekWithShift ? "no-shift-week" : ""
                       } ${
                         isToday
-                          ? "bg-green-200 ring-2 md:ring-4 ring-green-500 ring-inset font-bold z-40 print:bg-green-200"
+                          ? "bg-green-200 ring-2 md:ring-4 ring-green-500 ring-inset font-bold z-10 print:bg-green-200"
                           : isSelected
-                          ? "bg-blue-200 border-l-2 md:border-l-4 border-r-2 md:border-r-4 border-t-2 md:border-t-4 border-blue-500 z-30"
+                          ? "bg-blue-200 border-l-2 md:border-l-4 border-r-2 md:border-r-4 border-t-2 md:border-t-4 border-blue-500 z-10"
                           : isFocused
-                          ? "bg-yellow-100 border-l-2 md:border-l-4 border-r-2 md:border-r-4 border-t-2 md:border-t-4 border-yellow-500 z-30"
+                          ? "bg-yellow-100 border-l-2 md:border-l-4 border-r-2 md:border-r-4 border-t-2 md:border-t-4 border-yellow-500 z-10"
                           : day.isWeekend
                           ? "bg-indigo-50 print:bg-gray-100 border-r"
                           : "border-r"
@@ -3425,10 +3813,10 @@ const ShiftScheduler = () => {
                           : "Click to focus, Ctrl+Click to add, Shift+Click for range"
                       }
                     >
-                      <div className="text-[10px] md:text-xs font-bold text-gray-700 print:text-black">
+                      <div className="text-xs md:text-xs font-bold text-gray-700 print:text-black">
                         {day.date}
                       </div>
-                      <div className="text-[9px] text-gray-500 uppercase print:text-black">
+                      <div className="text-[10px] md:text-xs text-gray-500 uppercase print:text-black">
                         {day.weekDay}
                       </div>
                     </th>
@@ -3458,7 +3846,7 @@ const ShiftScheduler = () => {
                       onClick={() =>
                         setFocusedEmployeeId(isFocusedRow ? null : emp.id)
                       }
-                      className={`p-0 md:p-0.5 border-b bg-white sticky left-0 z-10 shadow-sm print:static print:border-black print:shadow-none group cursor-pointer ${
+                      className={`p-1 md:p-1.5 border-b bg-white sticky left-0 z-10 shadow-sm print:static print:border-black print:shadow-none group cursor-pointer ${
                         isFocusedRow
                           ? "border-l-2 md:border-l-4 border-t-2 md:border-t-4 border-b-2 md:border-b-4 border-yellow-500 bg-yellow-50"
                           : "border-r"
@@ -3466,7 +3854,7 @@ const ShiftScheduler = () => {
                       title="Click to focus this employee"
                     >
                       <div className="flex justify-between items-center">
-                        <div className="font-bold text-[10px] md:text-xs text-gray-800 print:text-black">
+                        <div className="font-bold text-xs md:text-xs text-gray-800 print:text-black">
                           {emp.name}
                         </div>
 
@@ -3537,7 +3925,7 @@ const ShiftScheduler = () => {
                             handleCellClick(e, emp.id, day.fullDate, emp.name)
                           }
                           className={`
-                            border-b p-0.5 text-center transition print:cursor-default relative
+                            border-b p-1 md:p-1.5 text-center transition print:cursor-default relative
                             ${!isWeekWithShift ? "no-shift-week" : ""}
                             ${
                               isToday
@@ -3567,7 +3955,7 @@ const ShiftScheduler = () => {
                               );
                             }}
                             className={`
-                              w-full h-5 rounded flex items-center justify-center text-[10px] md:text-xs font-bold shadow-sm print:shadow-none print:rounded-none border
+                              w-full h-7 md:h-8 rounded flex items-center justify-center text-xs md:text-xs font-bold shadow-sm print:shadow-none print:rounded-none border
                               ${
                                 shiftOverflowInfo.hasShiftOverflow
                                   ? "ring-2 ring-red-500 z-10"
