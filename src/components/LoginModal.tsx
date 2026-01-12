@@ -125,8 +125,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         }
 
         await signInWithCustomToken(auth, token);
-        // Persist token for session recovery
+        // Persist token and role for session recovery
         sessionStorage.setItem("firebaseToken", token);
+        sessionStorage.setItem("firebaseTokenRole", targetRole);
         const name = targetRole === "admin" ? "Admin" : "Diretor";
         onLoginSuccess(targetRole, name, 0);
         onClose();

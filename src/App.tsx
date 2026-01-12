@@ -1170,6 +1170,7 @@ const ShiftScheduler = () => {
                 return; // Session restored
               } catch (err) {
                 sessionStorage.removeItem("firebaseToken"); // Token invalid, clear it
+                sessionStorage.removeItem("firebaseTokenRole");
               }
             }
             await signInAnonymously(auth);
@@ -1361,6 +1362,7 @@ const ShiftScheduler = () => {
 
     const forceLogoutForIdle = async () => {
       sessionStorage.removeItem("firebaseToken");
+      sessionStorage.removeItem("firebaseTokenRole");
       try {
         await signOut(auth);
       } catch (err) {
@@ -1428,6 +1430,7 @@ const ShiftScheduler = () => {
     if (wasLoggedIn && isNowViewer && loggedInName) {
       // Token expired - clear storage and prompt re-login
       sessionStorage.removeItem("firebaseToken");
+      sessionStorage.removeItem("firebaseTokenRole");
       setTokenExpiredMsg(
         "Your session expired. Please log in again to continue as manager/admin."
       );
@@ -1621,7 +1624,7 @@ const ShiftScheduler = () => {
   };
 
   // Login Handling
-  const initiateLogin = (roleKey: string) => {
+  const initiateLogin = async (roleKey: string) => {
     if (roleKey === "VIEWER") {
       setCurrentUser(ROLES.VIEWER);
       setLoggedInName("");
@@ -1633,13 +1636,63 @@ const ShiftScheduler = () => {
       setSelectedDates([]);
       return;
     }
+
+    // Determine target role
+    let targetRoleToUse: RoleId;
     if (roleKey === "ADMIN") {
-      setTargetRole("admin");
+      targetRoleToUse = "admin";
     } else if (roleKey === "MANAGER") {
-      setTargetRole("manager");
+      targetRoleToUse = "manager";
     } else {
-      setTargetRole("editor");
+      targetRoleToUse = "editor";
     }
+
+    // Check if a valid token exists for this role
+    const storedToken = sessionStorage.getItem("firebaseToken");
+    const storedTokenRole = sessionStorage.getItem("firebaseTokenRole");
+
+    if (storedToken && storedTokenRole === targetRoleToUse) {
+      // Try to reuse the existing token
+      try {
+        const auth = getAuth();
+        await signInWithCustomToken(auth, storedToken);
+
+        // Token is valid, update user state based on role
+        lastActivityRef.current = Date.now();
+        lastRefreshRef.current = Date.now();
+
+        if (targetRoleToUse === "manager") {
+          setCurrentUser(ROLES.MANAGER);
+          setLoggedInName("Diretor");
+          setLoggedInUserId(0);
+          setFocusedEmployeeId(null);
+        } else if (targetRoleToUse === "admin") {
+          setCurrentUser(ROLES.ADMIN);
+          setLoggedInName("Admin");
+          setLoggedInUserId(0);
+          setFocusedEmployeeId(null);
+        } else if (targetRoleToUse === "editor") {
+          setCurrentUser(ROLES.EDITOR);
+          setFocusedEmployeeId(loggedInUserId);
+        }
+        previousUserRoleRef.current = targetRoleToUse;
+        setTokenExpiredMsg("");
+        return; // Skip login modal since token was successfully reused
+      } catch (err: any) {
+        // Token is invalid or expired, clear it and proceed to login
+        if (import.meta.env.DEV) {
+          console.warn(
+            "[Login] Stored token validation failed, will require new login:",
+            err
+          );
+        }
+        sessionStorage.removeItem("firebaseToken");
+        sessionStorage.removeItem("firebaseTokenRole");
+      }
+    }
+
+    // No valid token found, show login modal
+    setTargetRole(targetRoleToUse);
     setLoginModalOpen(true);
   };
 
