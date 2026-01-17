@@ -149,36 +149,72 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       const user = team.find((u) => u.id === +selectedUser);
       if (!user) return;
 
-      const userPass = user.password || "1234";
-
-      // Check if password is hashed (bcrypt hashes start with $2a$ or $2b$)
-      const isHashed = userPass.startsWith("$2");
-      let passwordMatches = false;
-
-      if (isHashed) {
-        // Compare with hashed password
-        passwordMatches = await bcrypt.compare(password, userPass);
-      } else {
-        // Plain text comparison (for legacy passwords)
-        passwordMatches = password === userPass;
-      }
-
-      if (passwordMatches) {
-        // Check if password change is required
-        if (
-          user.requirePasswordChange ||
-          !user.password ||
-          user.password === "1234"
-        ) {
-          setIsChangeMode(true);
-          setError("");
-          setSuccessMsg("");
+      try {
+        const cloudFunctionUrl = import.meta.env.VITE_CLOUD_FUNCTION_URL;
+        if (!cloudFunctionUrl) {
+          setError("Server configuration error. Contact administrator.");
           return;
         }
+
+        const res = await fetch(cloudFunctionUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          mode: "cors",
+          body: JSON.stringify({
+            role: "editor",
+            password,
+            userId: user.id,
+            team: team.map((t) => ({
+              id: t.id,
+              name: t.name,
+              password: t.password,
+            })),
+          }),
+        });
+
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          if (res.status === 429) {
+            setError("Too many login attempts. Try again later.");
+          } else if (res.status === 401) {
+            setError(t.invalidPass);
+          } else {
+            setError(errorData.error || t.invalidPass);
+          }
+          return;
+        }
+
+        const data = await res.json();
+        const token = data?.token;
+
+        if (!token || typeof token !== "string") {
+          setError("Invalid server response");
+          return;
+        }
+
+        const auth = getAuth();
+        try {
+          await auth.signOut();
+        } catch (e) {
+          if (import.meta.env.DEV) {
+            console.warn("[Login] signOut before custom token failed", e);
+          }
+        }
+
+        await signInWithCustomToken(auth, token);
+        sessionStorage.setItem("firebaseToken", token);
+        sessionStorage.setItem("firebaseTokenRole", "editor");
         onLoginSuccess("editor", user.name, user.id);
         onClose();
-      } else {
-        setError(t.invalidPass);
+      } catch (err: any) {
+        if (import.meta.env.DEV) {
+          console.error("Editor login error:", err);
+        }
+        setError(
+          err?.code === "auth/invalid-custom-token"
+            ? "Session expired. Try again."
+            : t.invalidPass
+        );
       }
     }
   };

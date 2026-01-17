@@ -39,14 +39,14 @@ service cloud.firestore {
       allow read: if true; // Public read - schedule is non-sensitive
 
       // Manager/Admin: full write with validation
-      allow write: if hasWriteAccess() && isValidGlobalState();
-      allow update: if hasWriteAccess() && isValidGlobalState();
+      allow write, update: if hasWriteAccess() && isValidGlobalState();
 
-      // Editor/Escalator: can only append to requests array
-      allow update: if canSubmitRequests() &&
+      // Editor/Escalator: can only update the requests array (append only)
+      allow update: if request.auth != null &&
                        request.auth.token.role == 'editor' &&
                        request.resource.data.requests is list &&
-                       resource.data.requests.size() < request.resource.data.requests.size(); // Can only add, not remove
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['requests', 'lastUpdated']) &&
+                       request.resource.data.requests.size() > resource.data.requests.size();
 
       allow delete: if false; // Never allow deletion
     }

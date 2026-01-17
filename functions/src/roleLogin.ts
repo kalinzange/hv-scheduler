@@ -5,6 +5,8 @@ import { admin } from "./admin";
 interface LoginRequest {
   role: string;
   password: string;
+  userId?: number; // For editor role
+  team?: Array<{ id: number; name: string; password?: string }>; // For editor role
 }
 
 interface LoginResponse {
@@ -113,7 +115,7 @@ export const roleLogin = functions.https.onRequest(
         return;
       }
 
-      const { role, password } = body as LoginRequest;
+      const { role, password, userId, team } = body as LoginRequest;
 
       // Input validation
       if (!role || !password) {
@@ -130,7 +132,7 @@ export const roleLogin = functions.https.onRequest(
         return;
       }
 
-      if (!["manager", "admin"].includes(role)) {
+      if (!["manager", "admin", "editor"].includes(role)) {
         res.status(400).json({ error: "Invalid role" } as ErrorResponse);
         return;
       }
@@ -158,6 +160,7 @@ export const roleLogin = functions.https.onRequest(
       // Compare password with stored hash
       let isValid = false;
       let grantedRole: string | null = null;
+      let grantedUserId: number | null = null;
 
       try {
         if (role === "manager") {
@@ -166,6 +169,36 @@ export const roleLogin = functions.https.onRequest(
         } else if (role === "admin") {
           isValid = await bcrypt.compare(password, adminHashEnv);
           if (isValid) grantedRole = "admin";
+        } else if (role === "editor") {
+          // For editors, validate against team member password
+          if (!userId || !team || !Array.isArray(team)) {
+            res.status(400).json({
+              error: "Missing userId or team for editor login",
+            } as ErrorResponse);
+            return;
+          }
+
+          const user = team.find((u) => u.id === userId);
+          if (!user) {
+            res.status(401).json({
+              error: "Invalid credentials",
+            } as ErrorResponse);
+            return;
+          }
+
+          const userPass = user.password || "1234";
+          const isHashed = userPass.startsWith("$2");
+
+          if (isHashed) {
+            isValid = await bcrypt.compare(password, userPass);
+          } else {
+            isValid = password === userPass;
+          }
+
+          if (isValid) {
+            grantedRole = "editor";
+            grantedUserId = userId;
+          }
         }
       } catch (bcryptError) {
         functions.logger.error("Bcrypt comparison error:", bcryptError);
@@ -196,11 +229,20 @@ export const roleLogin = functions.https.onRequest(
       }
 
       // Create Firebase custom token with role claim
-      const uid = `role-${grantedRole}`;
-      const customToken = await admin.auth().createCustomToken(uid, {
+      const uid =
+        grantedRole === "editor"
+          ? `editor-${grantedUserId}`
+          : `role-${grantedRole}`;
+      const claims: Record<string, any> = {
         role: grantedRole,
         loginTime: Date.now(),
-      });
+      };
+
+      if (grantedUserId !== null) {
+        claims.userId = grantedUserId;
+      }
+
+      const customToken = await admin.auth().createCustomToken(uid, claims);
 
       // Clear failed attempts on successful login
       attemptCache.delete(clientIp);

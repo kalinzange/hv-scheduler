@@ -1162,17 +1162,8 @@ const ShiftScheduler = () => {
             if (auth.currentUser) {
               return;
             }
-            // Try to restore session from stored token
-            const storedToken = sessionStorage.getItem("firebaseToken");
-            if (storedToken) {
-              try {
-                await signInWithCustomToken(auth, storedToken);
-                return; // Session restored
-              } catch (err) {
-                sessionStorage.removeItem("firebaseToken"); // Token invalid, clear it
-                sessionStorage.removeItem("firebaseTokenRole");
-              }
-            }
+            // Don't auto-restore tokens on page load - user must explicitly select a role
+            // This prevents editor tokens from being mistakenly used in manager/admin mode
             await signInAnonymously(auth);
             retryCountRef.current = 0; // Reset retry count on success
           } catch (authError: any) {
@@ -1651,11 +1642,35 @@ const ShiftScheduler = () => {
     const storedToken = sessionStorage.getItem("firebaseToken");
     const storedTokenRole = sessionStorage.getItem("firebaseTokenRole");
 
+    // If a token exists for a different role, drop it to avoid cross-role reuse
+    if (storedToken && storedTokenRole && storedTokenRole !== targetRoleToUse) {
+      sessionStorage.removeItem("firebaseToken");
+      sessionStorage.removeItem("firebaseTokenRole");
+    }
+
     if (storedToken && storedTokenRole === targetRoleToUse) {
       // Try to reuse the existing token
       try {
         const auth = getAuth();
         await signInWithCustomToken(auth, storedToken);
+
+        // Verify token claims match the requested role
+        const tokenResult = await auth.currentUser?.getIdTokenResult();
+        const claimRole = (tokenResult?.claims as any)?.role as
+          | RoleId
+          | undefined;
+        const claimUserId = (tokenResult?.claims as any)?.userId as
+          | number
+          | undefined;
+
+        if (claimRole !== targetRoleToUse) {
+          await auth.signOut();
+          sessionStorage.removeItem("firebaseToken");
+          sessionStorage.removeItem("firebaseTokenRole");
+          throw new Error(
+            `Token role mismatch: expected ${targetRoleToUse}, got ${claimRole}`
+          );
+        }
 
         // Token is valid, update user state based on role
         lastActivityRef.current = Date.now();
@@ -1673,7 +1688,12 @@ const ShiftScheduler = () => {
           setFocusedEmployeeId(null);
         } else if (targetRoleToUse === "editor") {
           setCurrentUser(ROLES.EDITOR);
-          setFocusedEmployeeId(loggedInUserId);
+          if (typeof claimUserId === "number") {
+            setLoggedInUserId(claimUserId);
+            setFocusedEmployeeId(claimUserId);
+          } else {
+            setFocusedEmployeeId(loggedInUserId);
+          }
         }
         previousUserRoleRef.current = targetRoleToUse;
         setTokenExpiredMsg("");
