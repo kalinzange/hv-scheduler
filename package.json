@@ -21,6 +21,7 @@
   "homepage": "https://kalinzange.github.io/hv-scheduler/",
   "scripts": {
     "dev": "vite",
+    "prebuild": "node scripts/generate-version.js",
     "build": "tsc && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
