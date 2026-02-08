@@ -6,7 +6,7 @@ export type Language = "EN" | "DE" | "IT" | "FR" | "PT" | "TR" | "ES";
 export type RotationMode = "STANDARD" | "FIXED_M" | "FIXED_T" | "FIXED_N";
 export type RequestStatus = "PENDING" | "APPROVED" | "REJECTED";
 export type LangCode = "en";
-export type SortOrder = "Default" | "AZ" | "ZA" | "LANG" | "ROLE";
+export type SortOrder = "AZ" | "ZA" | "ROLE";
 export type RoleId = "viewer" | "editor" | "manager" | "admin";
 
 export interface RotationConfig {

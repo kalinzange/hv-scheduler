@@ -51,14 +51,24 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       return acc;
     }, {});
 
-    const roleOrder = ["GCC", "Field Dispatch", "Remote Ops", "TL"];
-    const roleIndex = (role: string) => {
-      const idx = roleOrder.indexOf(role);
-      return idx === -1 ? roleOrder.length : idx;
-    };
-
+    const priorityRoles = ["GCC", "Field Dispatch", "Remote Ops"];
+    
     return Object.entries(buckets)
-      .sort(([roleA], [roleB]) => roleIndex(roleA) - roleIndex(roleB))
+      .sort(([roleA], [roleB]) => {
+        const indexA = priorityRoles.indexOf(roleA);
+        const indexB = priorityRoles.indexOf(roleB);
+        
+        // If both roles are in priority list, sort by their priority order
+        if (indexA !== -1 && indexB !== -1) {
+          return indexA - indexB;
+        }
+        // If only roleA is in priority list, it comes first
+        if (indexA !== -1) return -1;
+        // If only roleB is in priority list, it comes first
+        if (indexB !== -1) return 1;
+        // If neither is in priority list, sort alphabetically
+        return roleA.localeCompare(roleB);
+      })
       .map(([role, members]) => ({
         role,
         members: members.slice().sort((a, b) => a.name.localeCompare(b.name)),

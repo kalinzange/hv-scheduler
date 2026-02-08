@@ -2059,14 +2059,32 @@ const ShiftScheduler = () => {
       result.sort((a, b) => a.name.localeCompare(b.name));
     } else if (sortOrder === "ZA") {
       result.sort((a, b) => b.name.localeCompare(a.name));
-    } else if (sortOrder === "LANG") {
-      result.sort((a, b) =>
-        a.languages.join("").localeCompare(b.languages.join("")),
-      );
     } else if (sortOrder === "ROLE") {
-      result.sort((a, b) => a.role.localeCompare(b.role));
-    } else {
-      result.sort((a, b) => a.offset - b.offset);
+      const priorityRoles = ["GCC", "Field Dispatch", "Remote Ops"];
+      result.sort((a, b) => {
+        const indexA = priorityRoles.indexOf(a.role);
+        const indexB = priorityRoles.indexOf(b.role);
+
+        // If both roles are in priority list, sort by their priority order
+        if (indexA !== -1 && indexB !== -1) {
+          if (indexA !== indexB) {
+            return indexA - indexB;
+          }
+          // Same priority role, sort by name
+          return a.name.localeCompare(b.name);
+        }
+        // If only roleA is in priority list, it comes first
+        if (indexA !== -1) return -1;
+        // If only roleB is in priority list, it comes first
+        if (indexB !== -1) return 1;
+        // If neither is in priority list, sort alphabetically by role first
+        const roleCompare = a.role.localeCompare(b.role);
+        if (roleCompare !== 0) {
+          return roleCompare;
+        }
+        // Same role, sort by name
+        return a.name.localeCompare(b.name);
+      });
     }
 
     return result;
@@ -3246,32 +3264,15 @@ const ShiftScheduler = () => {
             >
               <BarChart3 size={16} className="mr-2" /> {t.stats}
             </button>
-            <button
-              onClick={handleExportCSV}
-              className="hidden md:flex items-center px-3 py-2 bg-green-50 text-green-700 rounded hover:bg-green-100 transition border border-green-200"
-            >
-              <Download size={16} className="mr-2" /> {t.exportCsv}
-            </button>
-            <button
-              onClick={() => window.print()}
-              className="hidden md:flex items-center px-3 py-2 bg-gray-50 text-gray-700 rounded hover:bg-gray-100 transition border border-gray-200"
-            >
-              <Printer size={16} className="mr-2" /> {t.print}
-            </button>
-            <button
-              onClick={() => handleExportImage("png")}
-              className="hidden md:flex items-center px-3 py-2 bg-sky-50 text-sky-700 rounded hover:bg-sky-100 transition border border-sky-200"
-              title="Export as PNG"
-            >
-              <Download size={16} className="mr-2" /> PNG
-            </button>
-            <button
-              onClick={() => handleExportImage("jpeg")}
-              className="hidden md:flex items-center px-3 py-2 bg-rose-50 text-rose-700 rounded hover:bg-rose-100 transition border border-rose-200"
-              title="Export as JPEG"
-            >
-              <Download size={16} className="mr-2" /> JPEG
-            </button>
+
+            {isManager && (
+              <button
+                onClick={handleExportCSV}
+                className="hidden md:flex items-center px-3 py-2 bg-green-50 text-green-700 rounded hover:bg-green-100 transition border border-green-200"
+              >
+                <Download size={16} className="mr-2" /> {t.exportCsv}
+              </button>
+            )}
 
             {isManager && (
               <div className="flex flex-col gap-0.5">
@@ -3538,15 +3539,11 @@ const ShiftScheduler = () => {
                 style={{ color: "#374151" }}
               >
                 <span className="truncate">
-                  {sortOrder === "OFFSET"
-                    ? t.sortDefault
-                    : sortOrder === "AZ"
-                      ? t.sortAZ
-                      : sortOrder === "ZA"
-                        ? t.sortZA
-                        : sortOrder === "LANG"
-                          ? t.sortLang
-                          : t.sortRole}
+                  {sortOrder === "AZ"
+                    ? t.sortAZ
+                    : sortOrder === "ZA"
+                      ? t.sortZA
+                      : t.sortRole}
                 </span>
                 <ChevronRight
                   size={10}
@@ -3563,10 +3560,8 @@ const ShiftScheduler = () => {
                   />
                   <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50 min-w-[130px]">
                     {[
-                      { val: "OFFSET", label: t.sortDefault },
                       { val: "AZ", label: t.sortAZ },
                       { val: "ZA", label: t.sortZA },
-                      { val: "LANG", label: t.sortLang },
                       { val: "ROLE", label: t.sortRole },
                     ].map((s) => (
                       <button
@@ -3819,10 +3814,8 @@ const ShiftScheduler = () => {
               onChange={(e) => setSortOrder(e.target.value)}
               className="text-xs border rounded p-1"
             >
-              <option value="OFFSET">{t.sortDefault}</option>
               <option value="AZ">{t.sortAZ}</option>
               <option value="ZA">{t.sortZA}</option>
-              <option value="LANG">{t.sortLang}</option>
               <option value="ROLE">{t.sortRole}</option>
             </select>
           </div>
@@ -3983,18 +3976,6 @@ const ShiftScheduler = () => {
                     )}
                     {sortOrder === "ZA" && (
                       <ArrowDownZA
-                        size={14}
-                        className="text-indigo-600 ml-1 print:hidden"
-                      />
-                    )}
-                    {sortOrder === "OFFSET" && (
-                      <ArrowDownAZ
-                        size={14}
-                        className="text-gray-400 ml-1 print:hidden"
-                      />
-                    )}
-                    {sortOrder === "LANG" && (
-                      <LangIcon
                         size={14}
                         className="text-indigo-600 ml-1 print:hidden"
                       />
