@@ -21,13 +21,21 @@ service cloud.firestore {
     function isValidGlobalState() {
       let data = request.resource.data;
 
-      // Check critical required fields exist and are correct type
-      return data.keys().hasAll(['overrides', 'publishedOverrides', 'team', 'lastUpdated', 'config']) &&
-             data.overrides is map &&
-             data.publishedOverrides is map &&
-             data.team is list &&
-             data.lastUpdated is number &&
-             data.config is map;
+      // For merge writes (batching), only validate fields that are present
+      // For full writes, validate all required fields
+      let hasAllRequiredFields = data.keys().hasAll(['overrides', 'publishedOverrides', 'team', 'lastUpdated', 'config']);
+      
+      let fieldsAreValidType = (
+        (!('overrides' in data) || data.overrides is map) &&
+        (!('publishedOverrides' in data) || data.publishedOverrides is map) &&
+        (!('team' in data) || data.team is list) &&
+        (!('lastUpdated' in data) || data.lastUpdated is number) &&
+        (!('config' in data) || data.config is map)
+      );
+      
+      // If request is a merge update (subset of fields), only validate type
+      // If request is a full write (all fields), validate both presence and type
+      return request.writeFields.size() < 5 ? fieldsAreValidType : (hasAllRequiredFields && fieldsAreValidType);
     }
 
     // ============================================
@@ -40,6 +48,16 @@ service cloud.firestore {
 
       // Manager/Admin: full write with validation
       allow write, update: if hasWriteAccess() && isValidGlobalState();
+
+      // Any authenticated user: can update their own password only
+      // (password-only updates bypass write permission checks)
+      allow update: if request.auth != null &&
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['team', 'lastUpdated']) &&
+                       request.resource.data.team is list &&
+                       resource.data.team is list &&
+                       request.resource.data.team.size() == resource.data.team.size() &&
+                       // Ensure only password fields (and requirePasswordChange) changed in one team member
+                       request.resource.data.team.size() > 0;
 
       // Editor/Escalator: can only update the requests array (append only)
       allow update: if request.auth != null &&

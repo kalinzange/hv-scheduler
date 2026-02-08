@@ -1,8 +1,16 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Lock, UserCheck, AlertCircle, CheckCircle } from "lucide-react";
+import {
+  Lock,
+  UserCheck,
+  AlertCircle,
+  CheckCircle,
+  Loader2,
+} from "lucide-react";
 import bcrypt from "bcryptjs";
 import type { Employee, Translations, RoleId } from "../types";
 import { getAuth, signInWithCustomToken } from "firebase/auth";
+import { doc, updateDoc, getFirestore } from "firebase/firestore";
+import { APP_ID } from "../config/constants";
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -32,6 +40,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const [isChangeMode, setIsChangeMode] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [storedToken, setStoredToken] = useState<string | null>(null);
 
   const groupedTeam = useMemo(() => {
     const buckets = team.reduce<Record<string, Employee[]>>((acc, member) => {
@@ -64,6 +74,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       setIsChangeMode(false);
       setNewPassword("");
       setConfirmPassword("");
+      setIsLoading(false);
+      setStoredToken(null);
     }
   }, [isOpen, targetRole]);
 
@@ -72,18 +84,21 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setIsLoading(true);
 
     if (targetRole === "manager" || targetRole === "admin") {
       try {
         // Validate inputs before sending
         if (!password || password.length < 1 || password.length > 500) {
           setError("Invalid password format");
+          setIsLoading(false);
           return;
         }
 
         const cloudFunctionUrl = import.meta.env.VITE_CLOUD_FUNCTION_URL;
         if (!cloudFunctionUrl) {
           setError("Server configuration error. Contact administrator.");
+          setIsLoading(false);
           return;
         }
 
@@ -103,6 +118,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           } else {
             setError(errorData.error || t.invalidPass);
           }
+          setIsLoading(false);
           return;
         }
 
@@ -111,6 +127,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
         if (!token || typeof token !== "string") {
           setError("Invalid server response");
+          setIsLoading(false);
           return;
         }
 
@@ -131,6 +148,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         const name = targetRole === "admin" ? "Admin" : "Diretor";
         onLoginSuccess(targetRole, name, 0);
         onClose();
+        setIsLoading(false);
       } catch (err: any) {
         if (import.meta.env.DEV) {
           console.error("Login error:", err);
@@ -138,21 +156,27 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         setError(
           err?.code === "auth/invalid-custom-token"
             ? "Session expired. Try again."
-            : t.invalidPass
+            : t.invalidPass,
         );
+        setIsLoading(false);
       }
     } else if (targetRole === "editor") {
       if (!selectedUser) {
         setError(t.selectUser);
+        setIsLoading(false);
         return;
       }
       const user = team.find((u) => u.id === +selectedUser);
-      if (!user) return;
+      if (!user) {
+        setIsLoading(false);
+        return;
+      }
 
       try {
         const cloudFunctionUrl = import.meta.env.VITE_CLOUD_FUNCTION_URL;
         if (!cloudFunctionUrl) {
           setError("Server configuration error. Contact administrator.");
+          setIsLoading(false);
           return;
         }
 
@@ -181,6 +205,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           } else {
             setError(errorData.error || t.invalidPass);
           }
+          setIsLoading(false);
           return;
         }
 
@@ -189,6 +214,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
         if (!token || typeof token !== "string") {
           setError("Invalid server response");
+          setIsLoading(false);
           return;
         }
 
@@ -201,11 +227,42 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           }
         }
 
+        // Authenticate with Firebase FIRST, before checking requirePasswordChange
         await signInWithCustomToken(auth, token);
+
+        // Wait for auth state to fully propagate (critical for Firestore permissions)
+        await new Promise((resolve) => {
+          const unsubscribe = auth.onAuthStateChanged((user) => {
+            if (user) {
+              unsubscribe();
+              resolve(undefined);
+            }
+          });
+          // Fallback timeout after 2 seconds
+          setTimeout(() => {
+            unsubscribe();
+            resolve(undefined);
+          }, 2000);
+        });
+
         sessionStorage.setItem("firebaseToken", token);
         sessionStorage.setItem("firebaseTokenRole", "editor");
+
+        // Always call onLoginSuccess to set user permissions in app state
         onLoginSuccess("editor", user.name, user.id);
+
+        // Check if user needs to change password
+        if (user.requirePasswordChange) {
+          // User is now authenticated and app knows they're an editor
+          // Keep modal open for password change
+          setIsChangeMode(true);
+          setIsLoading(false);
+          return;
+        }
+
+        // Normal login - user doesn't need to change password, close modal
         onClose();
+        setIsLoading(false);
       } catch (err: any) {
         if (import.meta.env.DEV) {
           console.error("Editor login error:", err);
@@ -213,8 +270,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         setError(
           err?.code === "auth/invalid-custom-token"
             ? "Session expired. Try again."
-            : t.invalidPass
+            : t.invalidPass,
         );
+        setIsLoading(false);
       }
     }
   };
@@ -237,7 +295,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     if (isHashed) {
       currentPasswordMatches = await bcrypt.compare(
         password,
-        currentStoredPass
+        currentStoredPass,
       );
     } else {
       currentPasswordMatches = password === currentStoredPass;
@@ -256,24 +314,52 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       return;
     }
 
-    // Hash the new password before saving
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    setIsLoading(true);
 
-    // Update state with hashed password and clear the requirePasswordChange flag
-    onTeamUpdate((prevTeam) =>
-      prevTeam.map((u) =>
+    try {
+      // Hash the new password before saving
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+      // Update team array with new password directly in Firestore
+      // This bypasses the normal save batcher and role-based filtering
+      const updatedTeam = team.map((u) =>
         u.id === +selectedUser
           ? { ...u, password: hashedPassword, requirePasswordChange: false }
-          : u
-      )
-    );
+          : u,
+      );
 
-    setSuccessMsg(t.passChanged);
-    // After successful password change, log the user in
-    setTimeout(() => {
-      onLoginSuccess("editor", user.name, user.id);
-      onClose();
-    }, 800);
+      const db = getFirestore();
+      const dataDocRef = doc(
+        db,
+        "artifacts",
+        APP_ID,
+        "public",
+        "data",
+        "shift_scheduler",
+        "global_state",
+      );
+
+      await updateDoc(dataDocRef, {
+        team: updatedTeam,
+        lastUpdated: Date.now(),
+      });
+
+      // Also update local state so the UI reflects the change
+      onTeamUpdate(() => updatedTeam);
+
+      setSuccessMsg(t.passChanged);
+
+      // User is already authenticated and logged into app
+      // Just close modal after password change
+      setTimeout(() => {
+        setIsLoading(false);
+        onClose();
+      }, 800);
+    } catch (error) {
+      console.error("Password change error:", error);
+      setError("Failed to change password. Please try again.");
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -354,16 +440,27 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="flex-1 py-3 text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition"
+                  disabled={isLoading}
+                  className="flex-1 py-3 text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {t.cancel}
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-3 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition flex items-center justify-center gap-2"
+                  disabled={isLoading}
+                  className="flex-1 py-3 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Lock size={16} />
-                  {t.login}
+                  {isLoading ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      {t.login}ing...
+                    </>
+                  ) : (
+                    <>
+                      <Lock size={16} />
+                      {t.login}
+                    </>
+                  )}
                 </button>
               </div>
               {targetRole === "editor" && (

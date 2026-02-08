@@ -8,6 +8,19 @@ export default defineConfig(({ mode }) => ({
   base: mode === "production" ? "/hv-scheduler/" : "/",
   build: {
     outDir: "docs",
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Firebase bundle
+          firebase: ["firebase/app", "firebase/auth", "firebase/firestore"],
+          // Lucide icons
+          icons: ["lucide-react"],
+          // Html2canvas (already lazy-loaded but split anyway)
+          html2canvas: ["html2canvas"],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 600,
   },
   preview: {
     port: 4173,

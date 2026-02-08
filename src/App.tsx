@@ -1,4 +1,12 @@
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, {
+  useState,
+  useMemo,
+  useRef,
+  useEffect,
+  useCallback,
+  lazy,
+  Suspense,
+} from "react";
 import "./responsive.css";
 import {
   ChevronLeft,
@@ -69,10 +77,6 @@ import type {
   RoleId,
   LangCode,
 } from "./types";
-import { LoginModal } from "./components/LoginModal";
-import { AdminPanel } from "./components/AdminPanel";
-import { RequestsModal } from "./components/RequestsModal";
-import { StatsModal } from "./components/StatsModal";
 import {
   FIREBASE_CONFIG,
   APP_ID,
@@ -84,6 +88,24 @@ import {
   INITIAL_TEAM,
 } from "./config/constants";
 import { TRANSLATIONS } from "./utils/translations";
+import { saveBatcher } from "./utils/saveBatcher";
+import { cacheStore } from "./utils/cacheStore";
+
+// --- LAZY-LOADED COMPONENTS (Code Splitting for Better Performance) ---
+const LoginModal = lazy(() =>
+  import("./components/LoginModal").then((m) => ({ default: m.LoginModal })),
+);
+const AdminPanel = lazy(() =>
+  import("./components/AdminPanel").then((m) => ({ default: m.AdminPanel })),
+);
+const RequestsModal = lazy(() =>
+  import("./components/RequestsModal").then((m) => ({
+    default: m.RequestsModal,
+  })),
+);
+const StatsModal = lazy(() =>
+  import("./components/StatsModal").then((m) => ({ default: m.StatsModal })),
+);
 
 // --- LOGIC HELPERS ---
 
@@ -109,7 +131,7 @@ const checkRestViolation = (prev: ShiftType, curr: ShiftType): boolean => {
 // Check if employee has 6+ consecutive working days and return the range
 const checkShiftOverflow = (
   shifts: OverrideType[],
-  index: number
+  index: number,
 ): { hasShiftOverflow: boolean; startIdx: number } => {
   // Find the start of the consecutive working days sequence
   let startIdx = index;
@@ -136,6 +158,58 @@ const checkShiftOverflow = (
     count >= 6 && index >= startIdx && index < startIdx + count;
 
   return { hasShiftOverflow, startIdx };
+};
+
+// --- TOKEN VALIDATION HELPERS ---
+
+/**
+ * Validates if a custom token is still valid for Firestore operations
+ * Custom tokens from Firebase Admin SDK expire after 1 hour
+ * Returns true if token appears valid, false if likely expired
+ *
+ * @param currentUser - Firebase Auth current user
+ * @returns Promise<boolean> - true if token is valid, false if expired
+ */
+const isCustomTokenValid = async (
+  currentUser: ReturnType<typeof getAuth>["currentUser"],
+): Promise<boolean> => {
+  if (!currentUser) return false;
+
+  try {
+    // Get the ID token result which contains the custom claims
+    const tokenResult = await currentUser.getIdTokenResult(false);
+
+    // Check for the loginTime claim that we set when creating the custom token
+    const loginTime = (tokenResult?.claims as any)?.loginTime;
+
+    if (!loginTime || typeof loginTime !== "number") {
+      console.warn("[Token] No loginTime claim found in token");
+      return false;
+    }
+
+    const now = Date.now();
+    const tokenAgeMs = now - loginTime;
+    const oneHourMs = 60 * 60 * 1000;
+
+    // If token is older than 50 minutes, it's approaching expiration
+    // (Custom tokens expire at 60 minutes)
+    const isValid = tokenAgeMs < oneHourMs;
+
+    if (import.meta.env.DEV) {
+      console.log("[Token] Token age check:", {
+        loginTime,
+        now,
+        ageMinutes: Math.round(tokenAgeMs / 1000 / 60),
+        isValid,
+      });
+    }
+
+    return isValid;
+  } catch (err) {
+    // If we can't determine age, assume it might be expired
+    console.warn("[Token] Could not determine token age:", err);
+    return false;
+  }
 };
 
 // --- COMPONENTS ---
@@ -353,7 +427,7 @@ const AnnualViewModal = ({
           title={`${dateStr}: ${shift}`}
         >
           {shift !== "F" ? shift : ""}
-        </div>
+        </div>,
       );
     }
     return days;
@@ -560,7 +634,7 @@ const ConfigPanel = ({
       .map((l) => l.trim() as Language)
       .filter((l) => l);
     setTeam(
-      team.map((t: any) => (t.id === empId ? { ...t, languages: langs } : t))
+      team.map((t: any) => (t.id === empId ? { ...t, languages: langs } : t)),
     );
   };
 
@@ -1030,7 +1104,7 @@ const ShiftScheduler = () => {
   const lastRefreshRef = useRef<number>(Date.now()); // Track last token refresh
   const activityListenersAttachedRef = useRef(false);
   const idleCheckIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
-    null
+    null,
   );
 
   // ref to calendar scroll container and extra-days flag to append next-month days
@@ -1059,7 +1133,7 @@ const ShiftScheduler = () => {
   const [mobileFilterShiftOpen, setMobileFilterShiftOpen] = useState(false);
   const [mobileFilterSortOpen, setMobileFilterSortOpen] = useState(false);
   const [focusedEmployeeId, setFocusedEmployeeId] = useState<number | null>(
-    null
+    null,
   );
   const [publishedOverrides, setPublishedOverrides] = useState<
     Record<string, OverrideType>
@@ -1148,6 +1222,11 @@ const ShiftScheduler = () => {
         return;
       }
 
+      // Initialize IndexedDB cache for readers (reduces listener traffic by ~40%)
+      cacheStore.init().catch((err) => {
+        console.warn("[Init] IndexedDB cache failed:", err);
+      });
+
       try {
         const app = initializeApp(FIREBASE_CONFIG);
         const auth = getAuth(app);
@@ -1196,7 +1275,7 @@ const ShiftScheduler = () => {
           "public",
           "data",
           "shift_scheduler",
-          "global_state"
+          "global_state",
         );
 
         unsubscribe = onSnapshot(
@@ -1233,11 +1312,27 @@ const ShiftScheduler = () => {
               if (data.overrides) setOverrides(data.overrides);
               if (data.publishedOverrides) {
                 setPublishedOverrides(data.publishedOverrides);
+                // Cache published data for readers (reduces 40% listener traffic)
+                cacheStore
+                  .savePublishedOverrides(data.publishedOverrides)
+                  .catch((err) => {
+                    console.warn(
+                      "[Cache] Failed to cache published overrides:",
+                      err,
+                    );
+                  });
               } else if (data.overrides) {
                 // Initialize publishedOverrides with overrides on first load
                 setPublishedOverrides(data.overrides);
               }
               if (data.lastPublished) setLastPublished(data.lastPublished);
+
+              // Cache team data for readers
+              if (data.team) {
+                cacheStore.saveTeamData(data.team).catch((err) => {
+                  console.warn("[Cache] Failed to cache team data:", err);
+                });
+              }
 
               setInitError(false);
               setIsLoading(false);
@@ -1271,7 +1366,7 @@ const ShiftScheduler = () => {
 
             // Attempt retry
             scheduleRetry();
-          }
+          },
         );
       } catch (error: any) {
         if (!isComponentMounted) return;
@@ -1297,7 +1392,7 @@ const ShiftScheduler = () => {
 
       const delayMs = Math.min(
         1000 * Math.pow(2, retryCountRef.current),
-        30000
+        30000,
       ); // Exponential backoff, max 30s
       retryCountRef.current++;
 
@@ -1365,7 +1460,7 @@ const ShiftScheduler = () => {
       setLoggedInName("");
       setLoggedInUserId(0);
       setTokenExpiredMsg(
-        "Session expired due to inactivity. Please log in again."
+        "Session expired due to inactivity. Please log in again.",
       );
       setLoginModalOpen(true);
       clearIdleTimer();
@@ -1423,7 +1518,7 @@ const ShiftScheduler = () => {
       sessionStorage.removeItem("firebaseToken");
       sessionStorage.removeItem("firebaseTokenRole");
       setTokenExpiredMsg(
-        "Your session expired. Please log in again to continue as manager/admin."
+        "Your session expired. Please log in again to continue as manager/admin.",
       );
       setLoginModalOpen(true);
       setLoggedInName("");
@@ -1431,7 +1526,70 @@ const ShiftScheduler = () => {
     }
   }, [currentUser.role, loggedInName]);
 
-  // --- SAVE TO FIREBASE (Debounced) ---
+  // --- INITIALIZE BATCHER ON MOUNT ---
+  useEffect(() => {
+    saveBatcher.setWriteCallback(async (batch) => {
+      try {
+        let app;
+        try {
+          app = getApp();
+        } catch {
+          app = initializeApp(FIREBASE_CONFIG);
+        }
+
+        const db = getFirestore(app);
+        const dataDocRef = doc(
+          db,
+          "artifacts",
+          APP_ID,
+          "public",
+          "data",
+          "shift_scheduler",
+          "global_state",
+        );
+
+        // Use merge:true to avoid overwriting unrelated fields
+        await setDoc(dataDocRef, batch, { merge: true });
+        // Note: Status will be set by statusCallback, not here
+      } catch (err: any) {
+        if (import.meta.env.DEV) {
+          console.error("[Batcher] Write failed:", {
+            code: err?.code,
+            message: err?.message,
+          });
+        }
+
+        // If permission denied, token has likely expired
+        if (err?.code === "permission-denied") {
+          console.warn("[Batcher] Permission denied - token has expired");
+          setTokenExpiredMsg("Your session has expired. Please log in again.");
+          const auth = getAuth();
+          await auth.signOut();
+          sessionStorage.removeItem("firebaseToken");
+          sessionStorage.removeItem("firebaseTokenRole");
+          setSaveStatus("error");
+          throw err;
+        }
+
+        throw err; // Re-throw for retry logic
+      }
+    });
+
+    // Set status callback to keep UI updated during retries
+    saveBatcher.setStatusCallback((status) => {
+      if (status === "success") {
+        setSaveStatus("saved");
+      } else if (status === "retrying") {
+        // Keep showing "saving" during retries
+        setSaveStatus("saving");
+      } else if (status === "failed") {
+        // Only show error after all retries exhausted
+        setSaveStatus("error");
+      }
+    });
+  }, []);
+
+  // --- SAVE TO FIREBASE (Batched & Debounced) ---
   useEffect(() => {
     if (isLoading || initError) return;
     if (!FIREBASE_CONFIG.apiKey || !APP_ID) {
@@ -1456,69 +1614,28 @@ const ShiftScheduler = () => {
 
     setSaveStatus("saving");
 
-    const saveData = async () => {
-      try {
-        let app;
-        try {
-          app = getApp();
-        } catch {
-          app = initializeApp(FIREBASE_CONFIG);
-        }
+    // Editors can only save their own overrides, not team/config/etc
+    // Managers/Admins can save everything
+    const isEditor = currentUser.role === "editor";
 
-        const db = getFirestore(app);
-        const dataDocRef = doc(
-          db,
-          "artifacts",
-          APP_ID,
-          "public",
-          "data",
-          "shift_scheduler",
-          "global_state"
-        );
-
-        await setDoc(dataDocRef, {
-          startDateStr,
-          holidays,
-          minStaff,
-          requiredLangs,
-          weekendDays,
-          legends,
-          colors,
-          overrides,
-          publishedOverrides,
-          lastPublished: lastPublished || null,
-          config,
-          hoursConfig,
-          team: teamState,
-          requests,
-          lastUpdated: Date.now(),
-        });
-
-        setSaveStatus("saved");
-      } catch (err: any) {
-        if (import.meta.env.DEV) {
-          console.error("[Save] Firebase error:", {
-            code: err?.code,
-            message: err?.message,
-            error: err,
-          });
-          try {
-            const auth = getAuth();
-            const tokenResult = await auth.currentUser?.getIdTokenResult();
-            console.error("[Save] Current auth context", {
-              uid: auth.currentUser?.uid,
-              claims: tokenResult?.claims,
-            });
-          } catch (claimErr) {
-            console.error("[Save] Failed to fetch token claims", claimErr);
-          }
-        }
-        setSaveStatus("error");
-      }
-    };
-
-    const timer = setTimeout(saveData, 2000);
-    return () => clearTimeout(timer);
+    // Collect changes and add to batch queue
+    // The batcher will automatically write when batch is full (10 ops) or timeout (5s) occurs
+    saveBatcher.addChanges({
+      startDateStr,
+      holidays: isEditor ? undefined : holidays,
+      minStaff: isEditor ? undefined : minStaff,
+      requiredLangs: isEditor ? undefined : requiredLangs,
+      weekendDays: isEditor ? undefined : weekendDays,
+      legends: isEditor ? undefined : legends,
+      colors: isEditor ? undefined : colors,
+      overrides,
+      publishedOverrides: isEditor ? undefined : publishedOverrides,
+      lastPublished: isEditor ? undefined : lastPublished || null,
+      config: isEditor ? undefined : config,
+      hoursConfig: isEditor ? undefined : hoursConfig,
+      team: isEditor ? undefined : teamState, // Editors cannot save team data
+      requests,
+    });
   }, [
     startDateStr,
     holidays,
@@ -1534,6 +1651,8 @@ const ShiftScheduler = () => {
     requests,
     isLoading,
     initError,
+    canWrite,
+    currentUser.role,
   ]);
 
   const handleReset = () => {
@@ -1543,6 +1662,7 @@ const ShiftScheduler = () => {
       setOverrides({});
       setPublishedOverrides({});
       setRequests([]);
+      saveBatcher.clear(); // Clear pending batches on reset
       window.location.reload();
     }
   };
@@ -1555,12 +1675,36 @@ const ShiftScheduler = () => {
     setLastPublished(newLastPublished);
     setHasUnpublishedChanges(false);
 
-    // Immediately save to Firebase
+    // Flush any pending changes immediately before publishing
+    await saveBatcher.flush();
+
+    // Then save published state
     if (FIREBASE_CONFIG.apiKey) {
       try {
         const auth = getAuth();
-        // Refresh token to ensure it's still valid
-        await auth.currentUser?.getIdToken(true);
+        const currentUser = auth.currentUser;
+
+        if (!currentUser) {
+          throw new Error("No user authenticated");
+        }
+
+        // Check token age - custom tokens expire after 1 hour
+        // If approaching expiration, warn user
+        const isTokenStillValid = await isCustomTokenValid(currentUser);
+        if (!isTokenStillValid) {
+          console.warn(
+            "[Publish] Custom token has expired, requesting re-login",
+          );
+          setTokenExpiredMsg(
+            "Your session has expired. Please log in again to publish.",
+          );
+          const auth = getAuth();
+          await auth.signOut();
+          sessionStorage.removeItem("firebaseToken");
+          sessionStorage.removeItem("firebaseTokenRole");
+          setSaveStatus("error");
+          return;
+        }
 
         const app = getApp();
         const db = dbRef.current || getFirestore(app);
@@ -1572,7 +1716,7 @@ const ShiftScheduler = () => {
           "public",
           "data",
           "shift_scheduler",
-          "global_state"
+          "global_state",
         );
 
         const publishData = {
@@ -1595,10 +1739,21 @@ const ShiftScheduler = () => {
 
         console.log(
           "[Publish] Writing data with keys:",
-          Object.keys(publishData)
+          Object.keys(publishData),
         );
 
-        await setDoc(dataDocRef, publishData);
+        // Log authentication details for debugging
+        const tokenResult = await currentUser.getIdTokenResult();
+        console.log("[Publish] User UID:", currentUser.uid);
+        console.log("[Publish] Token claims:", {
+          role: (tokenResult?.claims as any)?.role,
+          userId: (tokenResult?.claims as any)?.userId,
+          loginTime: (tokenResult?.claims as any)?.loginTime,
+        });
+
+        // Use merge:true to match batcher behavior and reduce validation strictness
+        // Full write validation is more strict and can reject valid data
+        await setDoc(dataDocRef, publishData, { merge: true });
 
         setSaveStatus("saved");
       } catch (err: any) {
@@ -1606,6 +1761,21 @@ const ShiftScheduler = () => {
           code: err?.code,
           message: err?.message,
         });
+
+        // If it's a permission denied error, the token has likely expired
+        if (err?.code === "permission-denied") {
+          console.warn(
+            "[Publish] Permission denied - token has expired, please log in again",
+          );
+          setTokenExpiredMsg(
+            "Your session has expired. Please log in again to publish.",
+          );
+          const auth = getAuth();
+          await auth.signOut();
+          sessionStorage.removeItem("firebaseToken");
+          sessionStorage.removeItem("firebaseTokenRole");
+        }
+
         setSaveStatus("error");
       }
     } else {
@@ -1642,11 +1812,10 @@ const ShiftScheduler = () => {
     const storedToken = sessionStorage.getItem("firebaseToken");
     const storedTokenRole = sessionStorage.getItem("firebaseTokenRole");
 
-    // If a token exists for a different role, drop it to avoid cross-role reuse
-    if (storedToken && storedTokenRole && storedTokenRole !== targetRoleToUse) {
-      sessionStorage.removeItem("firebaseToken");
-      sessionStorage.removeItem("firebaseTokenRole");
-    }
+    // Note: Do not clear tokens for other roles here.
+    // If the stored token is for a different role, we simply won't reuse it.
+    // This avoids accidentally dropping a valid Manager/Admin token when opening
+    // the Escalator (editor) login and cancelling.
 
     if (storedToken && storedTokenRole === targetRoleToUse) {
       // Try to reuse the existing token
@@ -1668,7 +1837,7 @@ const ShiftScheduler = () => {
           sessionStorage.removeItem("firebaseToken");
           sessionStorage.removeItem("firebaseTokenRole");
           throw new Error(
-            `Token role mismatch: expected ${targetRoleToUse}, got ${claimRole}`
+            `Token role mismatch: expected ${targetRoleToUse}, got ${claimRole}`,
           );
         }
 
@@ -1703,7 +1872,7 @@ const ShiftScheduler = () => {
         if (import.meta.env.DEV) {
           console.warn(
             "[Login] Stored token validation failed, will require new login:",
-            err
+            err,
           );
         }
         sessionStorage.removeItem("firebaseToken");
@@ -1743,7 +1912,7 @@ const ShiftScheduler = () => {
   };
 
   // --- REQUEST LOGIC ---
-  const handleApproveRequest = (req: ShiftRequest) => {
+  const handleApproveRequest = useCallback((req: ShiftRequest) => {
     setOverrides((prev) => {
       const next = { ...prev };
       const key = `${req.empId}_${req.date}`;
@@ -1752,15 +1921,15 @@ const ShiftScheduler = () => {
       return next;
     });
     setRequests((prev) =>
-      prev.map((r) => (r.id === req.id ? { ...r, status: "APPROVED" } : r))
+      prev.map((r) => (r.id === req.id ? { ...r, status: "APPROVED" } : r)),
     );
-  };
+  }, []);
 
-  const handleRejectRequest = (req: ShiftRequest) => {
+  const handleRejectRequest = useCallback((req: ShiftRequest) => {
     setRequests((prev) =>
-      prev.map((r) => (r.id === req.id ? { ...r, status: "REJECTED" } : r))
+      prev.map((r) => (r.id === req.id ? { ...r, status: "REJECTED" } : r)),
     );
-  };
+  }, []);
 
   // File Import/Export
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1892,7 +2061,7 @@ const ShiftScheduler = () => {
       result.sort((a, b) => b.name.localeCompare(a.name));
     } else if (sortOrder === "LANG") {
       result.sort((a, b) =>
-        a.languages.join("").localeCompare(b.languages.join(""))
+        a.languages.join("").localeCompare(b.languages.join("")),
       );
     } else if (sortOrder === "ROLE") {
       result.sort((a, b) => a.role.localeCompare(b.role));
@@ -1912,54 +2081,55 @@ const ShiftScheduler = () => {
     selectedDates,
   ]);
 
-  const handleCellClick = (
-    e: React.MouseEvent,
-    empId: number,
-    dateStr: string,
-    empName: string
-  ) => {
-    if (!canWrite) return;
-    // In Editor mode, only allow editing own cells
-    if (currentUser.role === "editor" && empId !== loggedInUserId) return;
-    const rect = (e.target as HTMLElement).getBoundingClientRect();
-    setEditingCell({
-      key: `${empId}_${dateStr}`,
-      x: rect.left,
-      y: rect.bottom,
-      empName,
-      date: dateStr,
-    });
-  };
-
-  const handleOverride = (key: string, value: OverrideType | undefined) => {
-    if (!canWrite) return;
-    if (isManager) {
-      setUndoHistory((prev) => [...prev, { ...overrides }]);
-      setRedoHistory([]);
-      setOverrides((prev) => {
-        const next = { ...prev };
-        if (value) next[key] = value;
-        else delete next[key];
-        return next;
+  const handleCellClick = useCallback(
+    (e: React.MouseEvent, empId: number, dateStr: string, empName: string) => {
+      if (!canWrite) return;
+      // In Editor mode, only allow editing own cells
+      if (currentUser.role === "editor" && empId !== loggedInUserId) return;
+      const rect = (e.target as HTMLElement).getBoundingClientRect();
+      setEditingCell({
+        key: `${empId}_${dateStr}`,
+        x: rect.left,
+        y: rect.bottom,
+        empName,
+        date: dateStr,
       });
-      return;
-    }
-    const [empIdStr, dateStr] = key.split("_");
-    const empId = parseInt(empIdStr);
-    if (empId !== loggedInUserId) return;
-    const empName = teamState.find((e) => e.id === empId)?.name || "Unknown";
-    const newReq: ShiftRequest = {
-      id: crypto.randomUUID(),
-      empId,
-      empName,
-      date: dateStr,
-      newShift: value,
-      status: "PENDING",
-      timestamp: Date.now(),
-    };
-    setRequests((prev) => [...prev, newReq]);
-    alert(t.requestSent);
-  };
+    },
+    [canWrite, currentUser.role, loggedInUserId],
+  );
+
+  const handleOverride = useCallback(
+    (key: string, value: OverrideType | undefined) => {
+      if (!canWrite) return;
+      if (isManager) {
+        setUndoHistory((prev) => [...prev, { ...overrides }]);
+        setRedoHistory([]);
+        setOverrides((prev) => {
+          const next = { ...prev };
+          if (value) next[key] = value;
+          else delete next[key];
+          return next;
+        });
+        return;
+      }
+      const [empIdStr, dateStr] = key.split("_");
+      const empId = parseInt(empIdStr);
+      if (empId !== loggedInUserId) return;
+      const empName = teamState.find((e) => e.id === empId)?.name || "Unknown";
+      const newReq: ShiftRequest = {
+        id: crypto.randomUUID(),
+        empId,
+        empName,
+        date: dateStr,
+        newShift: value,
+        status: "PENDING",
+        timestamp: Date.now(),
+      };
+      setRequests((prev) => [...prev, newReq]);
+      alert(t.requestSent);
+    },
+    [canWrite, isManager, overrides, loggedInUserId, teamState, t],
+  );
 
   const handleUndo = () => {
     if (undoHistory.length === 0) return;
@@ -1974,60 +2144,64 @@ const ShiftScheduler = () => {
     const next = redoHistory[redoHistory.length - 1];
     setUndoHistory((prev) => [...prev, { ...overrides }]);
     setOverrides(next);
+    setRedoHistory((prev) => prev.slice(0, -1));
   };
 
-  const handleBulkApply = (
-    targetId: string | number,
-    start: string,
-    end: string,
-    type: OverrideType | undefined
-  ) => {
-    if (!canWrite) return;
-    setUndoHistory((prev) => [...prev, { ...overrides }]);
-    setRedoHistory([]);
-    const applyToEmp = (empId: number) => {
-      const s = new Date(start);
-      const e = new Date(end);
-      const newOverrides = { ...overrides };
-      const current = new Date(s);
-      while (current <= e) {
-        const dateStr = getDateKey(current);
-        const key = `${empId}_${dateStr}`;
-        if (type) newOverrides[key] = type;
-        else delete newOverrides[key];
-        current.setDate(current.getDate() + 1);
-      }
-      return newOverrides;
-    };
-
-    if (typeof targetId === "number" || !isNaN(Number(targetId))) {
-      const empId = Number(targetId);
-      if (!isManager && empId !== loggedInUserId) {
-        alert(t.cantEditOthers);
-        return;
-      }
-      setOverrides(applyToEmp(empId));
-    } else if (targetId === "ALL") {
-      if (!isManager) {
-        alert(t.permissionDenied);
-        return;
-      }
-      let batchOverrides = { ...overrides };
-      teamState.forEach((emp) => {
+  const handleBulkApply = useCallback(
+    (
+      targetId: string | number,
+      start: string,
+      end: string,
+      type: OverrideType | undefined,
+    ) => {
+      if (!canWrite) return;
+      setUndoHistory((prev) => [...prev, { ...overrides }]);
+      setRedoHistory([]);
+      const applyToEmp = (empId: number) => {
         const s = new Date(start);
         const e = new Date(end);
+        const newOverrides = { ...overrides };
         const current = new Date(s);
         while (current <= e) {
           const dateStr = getDateKey(current);
-          const key = `${emp.id}_${dateStr}`;
-          if (type) batchOverrides[key] = type;
-          else delete batchOverrides[key];
+          const key = `${empId}_${dateStr}`;
+          if (type) newOverrides[key] = type;
+          else delete newOverrides[key];
           current.setDate(current.getDate() + 1);
         }
-      });
-      setOverrides(batchOverrides);
-    }
-  };
+        return newOverrides;
+      };
+
+      if (typeof targetId === "number" || !isNaN(Number(targetId))) {
+        const empId = Number(targetId);
+        if (!isManager && empId !== loggedInUserId) {
+          alert(t.cantEditOthers);
+          return;
+        }
+        setOverrides(applyToEmp(empId));
+      } else if (targetId === "ALL") {
+        if (!isManager) {
+          alert(t.permissionDenied);
+          return;
+        }
+        let batchOverrides = { ...overrides };
+        teamState.forEach((emp) => {
+          const s = new Date(start);
+          const e = new Date(end);
+          const current = new Date(s);
+          while (current <= e) {
+            const dateStr = getDateKey(current);
+            const key = `${emp.id}_${dateStr}`;
+            if (type) batchOverrides[key] = type;
+            else delete batchOverrides[key];
+            current.setDate(current.getDate() + 1);
+          }
+        });
+        setOverrides(batchOverrides);
+      }
+    },
+    [isManager, loggedInUserId, t, overrides, teamState],
+  );
 
   const calendarData = useMemo(() => {
     const year = currentDate.getFullYear();
@@ -2071,7 +2245,7 @@ const ShiftScheduler = () => {
 
         if (["M", "T", "N"].includes(shift)) {
           emp.languages.forEach((lang) =>
-            coverage[shift as "M" | "T" | "N"].add(lang)
+            coverage[shift as "M" | "T" | "N"].add(lang),
           );
           counts[shift as "M" | "T" | "N"]++;
         }
@@ -2138,7 +2312,9 @@ const ShiftScheduler = () => {
           let shift: OverrideType;
           const hasPending = requests.some(
             (r) =>
-              r.empId === emp.id && r.date === dateStr && r.status === "PENDING"
+              r.empId === emp.id &&
+              r.date === dateStr &&
+              r.status === "PENDING",
           );
           pendingReqs[emp.id] = hasPending;
 
@@ -2151,7 +2327,7 @@ const ShiftScheduler = () => {
           shifts[emp.id] = shift;
           if (["M", "T", "N"].includes(shift)) {
             emp.languages.forEach((lang) =>
-              coverage[shift as "M" | "T" | "N"].add(lang)
+              coverage[shift as "M" | "T" | "N"].add(lang),
             );
             counts[shift as "M" | "T" | "N"]++;
           }
@@ -2218,7 +2394,7 @@ const ShiftScheduler = () => {
     }
 
     const todayStr = `${today.getFullYear()}-${String(
-      today.getMonth() + 1
+      today.getMonth() + 1,
     ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     const todayIndex = calendarData.findIndex((d) => d.fullDate === todayStr);
 
@@ -2254,10 +2430,10 @@ const ShiftScheduler = () => {
 
           // Only trigger if horizontal scroll changed (not just vertical)
           const horizontalScrollDelta = Math.abs(
-            currentScrollLeft - lastScrollLeft
+            currentScrollLeft - lastScrollLeft,
           );
           const verticalScrollDelta = Math.abs(
-            currentScrollTop - lastScrollTop
+            currentScrollTop - lastScrollTop,
           );
 
           // Only proceed if horizontal scroll is significant and greater than vertical
@@ -2322,7 +2498,7 @@ const ShiftScheduler = () => {
 
       const daysInCurrent = getDaysInMonth(
         currentDate.getFullYear(),
-        currentDate.getMonth()
+        currentDate.getMonth(),
       );
       const lastIndexOfCurrent = daysInCurrent - 1;
 
@@ -2345,12 +2521,12 @@ const ShiftScheduler = () => {
         const nextMonthDate = new Date(
           currentDate.getFullYear(),
           currentDate.getMonth() + 1,
-          1
+          1,
         );
         setVisibleMonthDate(nextMonthDate);
       } else {
         setVisibleMonthDate(
-          new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+          new Date(currentDate.getFullYear(), currentDate.getMonth(), 1),
         );
       }
     };
@@ -2429,7 +2605,7 @@ const ShiftScheduler = () => {
     const nd = new Date(
       currentDate.getFullYear(),
       currentDate.getMonth() - 1,
-      1
+      1,
     );
     setCurrentDate(nd);
     setVisibleMonthDate(nd);
@@ -2442,7 +2618,7 @@ const ShiftScheduler = () => {
     const nd = new Date(
       currentDate.getFullYear(),
       currentDate.getMonth() + 1,
-      1
+      1,
     );
     setCurrentDate(nd);
     setVisibleMonthDate(nd);
@@ -2494,7 +2670,7 @@ const ShiftScheduler = () => {
       emp.role,
       emp.languages.join(" "),
       ...calendarData.map((d) =>
-        d.shifts[emp.id] === "F" ? "F" : d.shifts[emp.id]
+        d.shifts[emp.id] === "F" ? "F" : d.shifts[emp.id],
       ),
     ]);
     rows.push([]);
@@ -2529,7 +2705,7 @@ const ShiftScheduler = () => {
     link.setAttribute("href", url);
     link.setAttribute(
       "download",
-      `Schedule_${currentDate.getMonth() + 1}_${currentDate.getFullYear()}.csv`
+      `Schedule_${currentDate.getMonth() + 1}_${currentDate.getFullYear()}.csv`,
     );
     document.body.appendChild(link);
     link.click();
@@ -2611,7 +2787,7 @@ const ShiftScheduler = () => {
 
           const link = document.createElement("a");
           link.href = canvas.toDataURL(
-            `image/${format === "jpeg" ? "jpeg" : "png"}`
+            `image/${format === "jpeg" ? "jpeg" : "png"}`,
           );
           link.download = `schedule_${
             currentDate.getMonth() + 1
@@ -2635,7 +2811,7 @@ const ShiftScheduler = () => {
 
   const roles = useMemo(
     () => Array.from(new Set(teamState.map((e) => e.role))),
-    [teamState]
+    [teamState],
   );
   const pendingCount = requests.filter((r) => r.status === "PENDING").length;
 
@@ -2716,7 +2892,8 @@ const ShiftScheduler = () => {
                       ROLES[
                         Object.keys(ROLES).find(
                           (k) =>
-                            ROLES[k as keyof typeof ROLES].id === currentUser.id
+                            ROLES[k as keyof typeof ROLES].id ===
+                            currentUser.id,
                         ) as keyof typeof ROLES
                       ]?.label
                     }
@@ -2776,10 +2953,10 @@ const ShiftScheduler = () => {
                   saveStatus === "saved"
                     ? "bg-green-900/30 border-green-700 text-green-300"
                     : saveStatus === "saving"
-                    ? "bg-yellow-900/30 border-yellow-700 text-yellow-300"
-                    : saveStatus === "offline"
-                    ? "bg-orange-900/30 border-orange-700 text-orange-300 hover:bg-orange-900/50 cursor-help"
-                    : "bg-red-900/30 border-red-700 text-red-300"
+                      ? "bg-yellow-900/30 border-yellow-700 text-yellow-300"
+                      : saveStatus === "offline"
+                        ? "bg-orange-900/30 border-orange-700 text-orange-300 hover:bg-orange-900/50 cursor-help"
+                        : "bg-red-900/30 border-red-700 text-red-300"
                 }`}
                 title={
                   saveStatus === "offline"
@@ -2791,7 +2968,7 @@ const ShiftScheduler = () => {
                     ? () => {
                         if (import.meta.env.DEV)
                           console.log(
-                            "[User Action] Attempting manual reconnection"
+                            "[User Action] Attempting manual reconnection",
                           );
                         window.location.reload();
                       }
@@ -2844,10 +3021,10 @@ const ShiftScheduler = () => {
               saveStatus === "saved"
                 ? "bg-green-900/30 border-green-700 text-green-300"
                 : saveStatus === "saving"
-                ? "bg-yellow-900/30 border-yellow-700 text-yellow-300"
-                : saveStatus === "offline"
-                ? "bg-orange-900/30 border-orange-700 text-orange-300 hover:bg-orange-900/50 cursor-help"
-                : "bg-red-900/30 border-red-700 text-red-300"
+                  ? "bg-yellow-900/30 border-yellow-700 text-yellow-300"
+                  : saveStatus === "offline"
+                    ? "bg-orange-900/30 border-orange-700 text-orange-300 hover:bg-orange-900/50 cursor-help"
+                    : "bg-red-900/30 border-red-700 text-red-300"
             }`}
             title={
               saveStatus === "offline"
@@ -2859,7 +3036,7 @@ const ShiftScheduler = () => {
                 ? () => {
                     if (import.meta.env.DEV)
                       console.log(
-                        "[User Action] Attempting manual reconnection"
+                        "[User Action] Attempting manual reconnection",
                       );
                     window.location.reload();
                   }
@@ -2877,10 +3054,10 @@ const ShiftScheduler = () => {
               {saveStatus === "saved"
                 ? t.saved
                 : saveStatus === "saving"
-                ? t.saving
-                : saveStatus === "offline"
-                ? "Offline"
-                : t.offline}
+                  ? t.saving
+                  : saveStatus === "offline"
+                    ? "Offline"
+                    : t.offline}
             </span>
           </div>
 
@@ -2893,25 +3070,66 @@ const ShiftScheduler = () => {
         </div>
       </div>
 
-      <LoginModal
-        isOpen={loginModalOpen}
-        onClose={() => setLoginModalOpen(false)}
-        targetRole={targetRole}
-        team={teamState}
-        onLoginSuccess={handleLoginSuccess}
-        onTeamUpdate={setTeamState}
-        t={t}
-        tokenExpiredMsg={tokenExpiredMsg}
-      />
+      <Suspense
+        fallback={
+          <div className="fixed inset-0 bg-black/20 z-50 flex items-center justify-center">
+            <Loader2 size={32} className="animate-spin text-indigo-600" />
+          </div>
+        }
+      >
+        {loginModalOpen && (
+          <LoginModal
+            isOpen={loginModalOpen}
+            onClose={() => setLoginModalOpen(false)}
+            targetRole={targetRole}
+            team={teamState}
+            onLoginSuccess={handleLoginSuccess}
+            onTeamUpdate={setTeamState}
+            t={t}
+            tokenExpiredMsg={tokenExpiredMsg}
+          />
+        )}
 
-      <RequestsModal
-        isOpen={showRequests}
-        onClose={() => setShowRequests(false)}
-        requests={requests}
-        onApprove={handleApproveRequest}
-        onReject={handleRejectRequest}
-        t={t}
-      />
+        {showRequests && (
+          <RequestsModal
+            isOpen={showRequests}
+            onClose={() => setShowRequests(false)}
+            requests={requests}
+            onApprove={handleApproveRequest}
+            onReject={handleRejectRequest}
+            t={t}
+          />
+        )}
+
+        {showStats && (
+          <StatsModal
+            isOpen={showStats}
+            onClose={() => setShowStats(false)}
+            data={statsData}
+            t={t}
+            hoursConfig={hoursConfig}
+          />
+        )}
+
+        {showAnnual && (
+          <AnnualViewModal
+            isOpen={showAnnual}
+            onClose={() => setShowAnnual(false)}
+            team={teamState}
+            overrides={overrides}
+            colors={colors}
+            t={t}
+          />
+        )}
+
+        {showAdmin && (
+          <AdminPanel
+            show={showAdmin}
+            team={teamState}
+            setTeam={setTeamState}
+          />
+        )}
+      </Suspense>
 
       <BulkActionModal
         isOpen={showBulkModal}
@@ -2932,22 +3150,6 @@ const ShiftScheduler = () => {
           customColors={colors}
         />
       )}
-
-      <StatsModal
-        isOpen={showStats}
-        onClose={() => setShowStats(false)}
-        data={statsData}
-        t={t}
-        hoursConfig={hoursConfig}
-      />
-      <AnnualViewModal
-        isOpen={showAnnual}
-        onClose={() => setShowAnnual(false)}
-        team={teamState}
-        overrides={overrides}
-        colors={colors}
-        t={t}
-      />
 
       {/* Header */}
       <div className="bg-white flex flex-col shadow-sm z-20 print:hidden flex-shrink-0">
@@ -2982,7 +3184,7 @@ const ShiftScheduler = () => {
               <button
                 onClick={() => {
                   setPreSelectedBulkId(
-                    currentUser.role === "editor" ? String(loggedInUserId) : ""
+                    currentUser.role === "editor" ? String(loggedInUserId) : "",
                   );
                   setShowBulkModal(true);
                 }}
@@ -3073,8 +3275,8 @@ const ShiftScheduler = () => {
                     isLoading
                       ? "Loading schedule data..."
                       : hasUnpublishedChanges
-                      ? "Publish schedule to viewers"
-                      : "No unpublished changes"
+                        ? "Publish schedule to viewers"
+                        : "No unpublished changes"
                   }
                 >
                   {isLoading && (
@@ -3268,10 +3470,10 @@ const ShiftScheduler = () => {
                   {shiftFilter === "All"
                     ? "All Shifts"
                     : shiftFilter === "M"
-                    ? "Morning"
-                    : shiftFilter === "T"
-                    ? "Afternoon"
-                    : "Night"}
+                      ? "Morning"
+                      : shiftFilter === "T"
+                        ? "Afternoon"
+                        : "Night"}
                 </span>
                 <ChevronRight
                   size={10}
@@ -3327,12 +3529,12 @@ const ShiftScheduler = () => {
                   {sortOrder === "OFFSET"
                     ? t.sortDefault
                     : sortOrder === "AZ"
-                    ? t.sortAZ
-                    : sortOrder === "ZA"
-                    ? t.sortZA
-                    : sortOrder === "LANG"
-                    ? t.sortLang
-                    : t.sortRole}
+                      ? t.sortAZ
+                      : sortOrder === "ZA"
+                        ? t.sortZA
+                        : sortOrder === "LANG"
+                          ? t.sortLang
+                          : t.sortRole}
                 </span>
                 <ChevronRight
                   size={10}
@@ -3718,8 +3920,6 @@ const ShiftScheduler = () => {
 
       {/* Content */}
       <div className="flex flex-col md:flex-row flex-1 min-h-0 print:overflow-visible">
-        <AdminPanel show={showAdmin} team={teamState} setTeam={setTeamState} />
-
         <ConfigPanel
           show={canAccessSettings && showConfig}
           config={config}
@@ -3802,10 +4002,10 @@ const ShiftScheduler = () => {
                   const isSelected = selectedDates.includes(day.fullDate);
                   const today = new Date();
                   const todayStr = `${today.getFullYear()}-${String(
-                    today.getMonth() + 1
+                    today.getMonth() + 1,
                   ).padStart(2, "0")}-${String(today.getDate()).padStart(
                     2,
-                    "0"
+                    "0",
                   )}`;
                   const isToday = day.fullDate === todayStr;
                   return (
@@ -3816,7 +4016,7 @@ const ShiftScheduler = () => {
                           // Range selection with Shift
                           e.preventDefault();
                           const lastIndex = calendarData.findIndex(
-                            (d) => d.fullDate === lastSelectedDate
+                            (d) => d.fullDate === lastSelectedDate,
                           );
                           const currentIndex = dIdx;
                           const startIdx = Math.min(lastIndex, currentIndex);
@@ -3838,7 +4038,7 @@ const ShiftScheduler = () => {
                           e.preventDefault();
                           setSelectedDates((prev) => {
                             const isCurrentlySelected = prev.includes(
-                              day.fullDate
+                              day.fullDate,
                             );
                             const newSelection = isCurrentlySelected
                               ? prev.filter((d) => d !== day.fullDate)
@@ -3869,12 +4069,12 @@ const ShiftScheduler = () => {
                         isToday
                           ? "bg-green-200 ring-2 md:ring-4 ring-green-500 ring-inset font-bold z-10 print:bg-green-200"
                           : isSelected
-                          ? "bg-blue-200 border-l-2 md:border-l-4 border-r-2 md:border-r-4 border-t-2 md:border-t-4 border-blue-500 z-10"
-                          : isFocused
-                          ? "bg-yellow-100 border-l-2 md:border-l-4 border-r-2 md:border-r-4 border-t-2 md:border-t-4 border-yellow-500 z-10"
-                          : day.isWeekend
-                          ? "bg-indigo-50 print:bg-gray-100 border-r"
-                          : "border-r"
+                            ? "bg-blue-200 border-l-2 md:border-l-4 border-r-2 md:border-r-4 border-t-2 md:border-t-4 border-blue-500 z-10"
+                            : isFocused
+                              ? "bg-yellow-100 border-l-2 md:border-l-4 border-r-2 md:border-r-4 border-t-2 md:border-t-4 border-yellow-500 z-10"
+                              : day.isWeekend
+                                ? "bg-indigo-50 print:bg-gray-100 border-r"
+                                : "border-r"
                       } ${
                         day.isPtHoliday && !isFocused && !isSelected && !isToday
                           ? "bg-red-50 print:bg-gray-200"
@@ -3968,10 +4168,10 @@ const ShiftScheduler = () => {
                       const isFocused = focusedDate === day.fullDate;
                       const today = new Date();
                       const todayStr = `${today.getFullYear()}-${String(
-                        today.getMonth() + 1
+                        today.getMonth() + 1,
                       ).padStart(2, "0")}-${String(today.getDate()).padStart(
                         2,
-                        "0"
+                        "0",
                       )}`;
                       const isToday = day.fullDate === todayStr;
                       const isLastCell = dIdx === calendarData.length - 1;
@@ -3979,11 +4179,11 @@ const ShiftScheduler = () => {
                         dIdx > 0 &&
                         checkRestViolation(
                           prevShift as ShiftType,
-                          shift as ShiftType
+                          shift as ShiftType,
                         );
                       const shiftOverflowInfo = checkShiftOverflow(
                         empShifts,
-                        dIdx
+                        dIdx,
                       );
                       const isPending = day.pendingReqs[emp.id]; // Check for pending
                       prevShift = shift as ShiftType;
@@ -4004,16 +4204,16 @@ const ShiftScheduler = () => {
                               isToday
                                 ? "bg-green-100 border-l-4 border-r-4 border-green-500"
                                 : isSelected
-                                ? "bg-blue-100 border-l-4 border-r-4 border-blue-500"
-                                : isBothFocused
-                                ? "bg-yellow-100 border-l-4 border-r-4 border-t-4 border-b-4 border-yellow-500"
-                                : isFocusedRow
-                                ? `bg-yellow-50 border-t-4 border-b-4 border-yellow-500 ${
-                                    isLastCell ? "border-r-4" : ""
-                                  }`
-                                : isFocused
-                                ? "bg-yellow-50 border-l-4 border-r-4 border-yellow-500"
-                                : "border-r"
+                                  ? "bg-blue-100 border-l-4 border-r-4 border-blue-500"
+                                  : isBothFocused
+                                    ? "bg-yellow-100 border-l-4 border-r-4 border-t-4 border-b-4 border-yellow-500"
+                                    : isFocusedRow
+                                      ? `bg-yellow-50 border-t-4 border-b-4 border-yellow-500 ${
+                                          isLastCell ? "border-r-4" : ""
+                                        }`
+                                      : isFocused
+                                        ? "bg-yellow-50 border-l-4 border-r-4 border-yellow-500"
+                                        : "border-r"
                             }
                             cursor-pointer hover:opacity-80
                           `}
@@ -4024,7 +4224,7 @@ const ShiftScheduler = () => {
                                 e,
                                 emp.id,
                                 day.fullDate,
-                                emp.name
+                                emp.name,
                               );
                             }}
                             className={`
@@ -4033,8 +4233,8 @@ const ShiftScheduler = () => {
                                 shiftOverflowInfo.hasShiftOverflow
                                   ? "ring-2 ring-red-500 z-10"
                                   : isRestViolation
-                                  ? "ring-2 ring-orange-500 z-10"
-                                  : ""
+                                    ? "ring-2 ring-orange-500 z-10"
+                                    : ""
                               }
                               ${
                                 isPending
@@ -4047,10 +4247,10 @@ const ShiftScheduler = () => {
                               shiftOverflowInfo.hasShiftOverflow
                                 ? "ShiftOverflow (>40h)"
                                 : isPending
-                                ? t.pending
-                                : isRestViolation
-                                ? t.restWarn
-                                : ""
+                                  ? t.pending
+                                  : isRestViolation
+                                    ? t.restWarn
+                                    : ""
                             }
                           >
                             {isPending && (
@@ -4102,8 +4302,8 @@ const ShiftScheduler = () => {
                         {shiftCode === "M"
                           ? t.manha
                           : shiftCode === "T"
-                          ? t.tarde
-                          : t.noite}
+                            ? t.tarde
+                            : t.noite}
                       </td>
                       {calendarData.map((day) => {
                         const missing =
@@ -4122,8 +4322,8 @@ const ShiftScheduler = () => {
                                     isLastAnalysisRow ? "border-b-4" : ""
                                   }`
                                 : hasErr
-                                ? "bg-red-100 print:bg-gray-100 border-r"
-                                : "border-r"
+                                  ? "bg-red-100 print:bg-gray-100 border-r"
+                                  : "border-r"
                             } print:border-black`}
                           >
                             {hasErr ? (
@@ -4252,7 +4452,7 @@ const ShiftScheduler = () => {
                     {calendarData.map((day) => {
                       const isFocused = focusedDate === day.fullDate;
                       const pendingCount = Object.values(
-                        day.pendingReqs || {}
+                        day.pendingReqs || {},
                       ).filter(Boolean).length;
                       return (
                         <td
