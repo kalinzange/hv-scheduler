@@ -72,6 +72,7 @@ export const TRANSLATIONS: Record<"en", Translations> = {
     statTotal: "Shifts",
     statHours: "Hours",
     statBalance: "Balance",
+    statExtraHours: "Extra Hours",
     hoursTarget: "Target Hours/Month",
     hoursPerShift: "Hours per Shift",
     annualTitle: "Annual Planner",

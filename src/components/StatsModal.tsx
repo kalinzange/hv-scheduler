@@ -11,6 +11,7 @@ interface StatsData {
   V: number;
   Total: number;
   Hours: number;
+  ExtraHours: number;
 }
 
 // Simplified HoursConfig to match actual usage
@@ -71,6 +72,9 @@ export const StatsModal: React.FC<StatsModalProps> = ({
                 <th className="p-2 border text-center bg-yellow-50 font-bold">
                   {t.statHours}
                 </th>
+                <th className="p-2 border text-center bg-indigo-50 font-bold">
+                  {t.statExtraHours}
+                </th>
                 <th className="p-2 border text-center bg-gray-200 font-bold">
                   {t.statBalance}
                 </th>
@@ -96,6 +100,9 @@ export const StatsModal: React.FC<StatsModalProps> = ({
                     </td>
                     <td className="p-2 border text-center bg-yellow-50 font-mono">
                       {row.Hours}h
+                    </td>
+                    <td className="p-2 border text-center bg-indigo-50 font-mono font-bold text-indigo-700">
+                      {row.ExtraHours}h
                     </td>
                     <td
                       className={`p-2 border text-center font-bold font-mono ${

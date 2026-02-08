@@ -2564,20 +2564,31 @@ const ShiftScheduler = () => {
         we = 0,
         v = 0,
         total = 0,
-        hours = 0;
+        hours = 0,
+        extraHours = 0;
       calendarData.forEach((day) => {
         const s = day.shifts[emp.id];
+        const isSpecialDay = day.isWeekend || day.isPtHoliday;
         if (s === "M") {
           m++;
           hours += hoursConfig.M;
+          if (isSpecialDay) {
+            extraHours += 8;
+          }
         }
         if (s === "T") {
           tCount++;
           hours += hoursConfig.T;
+          if (isSpecialDay) {
+            extraHours += 8;
+          } else {
+            extraHours += 2;
+          }
         }
         if (s === "N") {
           n++;
           hours += hoursConfig.N;
+          extraHours += 8;
         }
         if (s === "V") v++;
         if (["M", "T", "N"].includes(s)) {
@@ -2594,6 +2605,7 @@ const ShiftScheduler = () => {
         V: v,
         Total: total,
         Hours: hours,
+        ExtraHours: extraHours,
       };
     });
   }, [calendarData, filteredTeam, hoursConfig]);
