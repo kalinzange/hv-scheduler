@@ -1133,6 +1133,11 @@ const ShiftScheduler = () => {
   const [mobileFilterLangOpen, setMobileFilterLangOpen] = useState(false);
   const [mobileFilterShiftOpen, setMobileFilterShiftOpen] = useState(false);
   const [mobileFilterSortOpen, setMobileFilterSortOpen] = useState(false);
+  const [desktopFilterSortOpen, setDesktopFilterSortOpen] = useState(false);
+  const [sortButtonPos, setSortButtonPos] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
   const [mobileFilterEmpOpen, setMobileFilterEmpOpen] = useState(false);
   const [focusedEmployeeId, setFocusedEmployeeId] = useState<number | null>(
     null,
@@ -3383,15 +3388,14 @@ const ShiftScheduler = () => {
             <div className="relative flex-1">
               <button
                 onClick={() => setMobileFilterRoleOpen(!mobileFilterRoleOpen)}
-                className="w-full flex items-center justify-between gap-1 bg-white border border-gray-300 rounded px-2 py-1 text-xs font-normal shadow-sm hover:shadow-md transition-all"
-                style={{ color: "#374151" }}
+                className="w-full flex items-center justify-between gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs font-medium text-gray-700 shadow-sm hover:shadow-md hover:border-gray-400 transition-all"
               >
                 <span className="truncate">
                   {roleFilter === "All" ? "All Roles" : roleFilter}
                 </span>
                 <ChevronRight
-                  size={10}
-                  className={`flex-shrink-0 transition-transform ${
+                  size={12}
+                  className={`flex-shrink-0 transition-transform text-gray-500 ${
                     mobileFilterRoleOpen ? "rotate-90" : ""
                   }`}
                 />
@@ -3402,7 +3406,7 @@ const ShiftScheduler = () => {
                     className="fixed inset-0 z-40"
                     onClick={() => setMobileFilterRoleOpen(false)}
                   />
-                  <div className="absolute top-full left-0 mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-[9999] min-w-[110px] w-56">
+                  <div className="absolute top-full left-0 mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-1.5 z-[9999] min-w-[110px] w-56">
                     {["All Roles", ...roles].map((r) => (
                       <button
                         key={r}
@@ -3410,16 +3414,16 @@ const ShiftScheduler = () => {
                           setRoleFilter(r === "All Roles" ? "All" : r);
                           setMobileFilterRoleOpen(false);
                         }}
-                        className={`w-full text-left px-3 py-1.5 text-xs font-normal transition-colors flex items-center gap-2 ${
+                        className={`w-full text-left px-3 py-2 text-xs font-medium transition-colors flex items-center gap-2 ${
                           (roleFilter === "All" && r === "All Roles") ||
                           roleFilter === r
-                            ? "bg-blue-50 text-blue-700"
-                            : "text-gray-700 hover:bg-gray-50"
+                            ? "bg-indigo-600 text-white"
+                            : "text-gray-700 hover:bg-gray-100"
                         }`}
                       >
                         {r}
                         {roleFilter === r && (
-                          <CheckCircle size={10} className="ml-auto" />
+                          <CheckCircle size={12} className="ml-auto" />
                         )}
                       </button>
                     ))}
@@ -3432,8 +3436,7 @@ const ShiftScheduler = () => {
             <div className="relative flex-1">
               <button
                 onClick={() => setMobileFilterLangOpen(!mobileFilterLangOpen)}
-                className="w-full flex items-center justify-between gap-1 bg-white border border-gray-300 rounded px-2 py-1 text-xs font-normal shadow-sm hover:shadow-md transition-all"
-                style={{ color: "#374151" }}
+                className="w-full flex items-center justify-between gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs font-medium text-gray-700 shadow-sm hover:shadow-md hover:border-gray-400 transition-all"
               >
                 <span className="truncate">
                   {langFilter.length === 0
@@ -3441,8 +3444,8 @@ const ShiftScheduler = () => {
                     : langFilter.join(", ")}
                 </span>
                 <ChevronRight
-                  size={10}
-                  className={`flex-shrink-0 transition-transform ${
+                  size={12}
+                  className={`flex-shrink-0 transition-transform text-gray-500 ${
                     mobileFilterLangOpen ? "rotate-90" : ""
                   }`}
                 />
@@ -3453,11 +3456,11 @@ const ShiftScheduler = () => {
                     className="fixed inset-0 z-40"
                     onClick={() => setMobileFilterLangOpen(false)}
                   />
-                  <div className="absolute top-full left-0 mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-[9999] min-w-[110px] w-56">
+                  <div className="absolute top-full left-0 mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-1.5 z-[9999] min-w-[110px] w-56">
                     {ALL_LANGUAGES.map((l) => (
                       <label
                         key={l}
-                        className="w-full text-left px-3 py-1.5 text-xs font-normal transition-colors flex items-center gap-2 cursor-pointer hover:bg-gray-50"
+                        className="w-full text-left px-3 py-2 text-xs font-medium transition-colors flex items-center gap-2 cursor-pointer hover:bg-gray-100"
                       >
                         <input
                           type="checkbox"
@@ -3471,7 +3474,7 @@ const ShiftScheduler = () => {
                               );
                             }
                           }}
-                          className="rounded"
+                          className="rounded w-4 h-4"
                         />
                         {l}
                       </label>
@@ -3487,8 +3490,7 @@ const ShiftScheduler = () => {
             <div className="relative flex-1">
               <button
                 onClick={() => setMobileFilterShiftOpen(!mobileFilterShiftOpen)}
-                className="w-full flex items-center justify-between gap-1 bg-white border border-gray-300 rounded px-2 py-1 text-xs font-normal shadow-sm hover:shadow-md transition-all"
-                style={{ color: "#374151" }}
+                className="w-full flex items-center justify-between gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs font-medium text-gray-700 shadow-sm hover:shadow-md hover:border-gray-400 transition-all"
               >
                 <span className="truncate">
                   {shiftFilter === "All"
@@ -3500,8 +3502,8 @@ const ShiftScheduler = () => {
                         : "Night"}
                 </span>
                 <ChevronRight
-                  size={10}
-                  className={`flex-shrink-0 transition-transform ${
+                  size={12}
+                  className={`flex-shrink-0 transition-transform text-gray-500 ${
                     mobileFilterShiftOpen ? "rotate-90" : ""
                   }`}
                 />
@@ -3512,7 +3514,7 @@ const ShiftScheduler = () => {
                     className="fixed inset-0 z-40"
                     onClick={() => setMobileFilterShiftOpen(false)}
                   />
-                  <div className="absolute top-full left-0 mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-[9999] min-w-[130px] w-56">
+                  <div className="absolute top-full left-0 mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-1.5 z-[9999] min-w-[130px] w-56">
                     {[
                       { val: "All", label: "All Shifts" },
                       { val: "M", label: "Morning (M)" },
@@ -3525,15 +3527,15 @@ const ShiftScheduler = () => {
                           setShiftFilter(s.val);
                           setMobileFilterShiftOpen(false);
                         }}
-                        className={`w-full text-left px-3 py-1.5 text-xs font-normal transition-colors flex items-center gap-2 ${
+                        className={`w-full text-left px-3 py-2 text-xs font-medium transition-colors flex items-center gap-2 ${
                           shiftFilter === s.val
-                            ? "bg-blue-50 text-blue-700"
-                            : "text-gray-700 hover:bg-gray-50"
+                            ? "bg-indigo-600 text-white"
+                            : "text-gray-700 hover:bg-gray-100"
                         }`}
                       >
                         {s.label}
                         {shiftFilter === s.val && (
-                          <CheckCircle size={10} className="ml-auto" />
+                          <CheckCircle size={12} className="ml-auto" />
                         )}
                       </button>
                     ))}
@@ -3546,8 +3548,7 @@ const ShiftScheduler = () => {
             <div className="relative flex-1">
               <button
                 onClick={() => setMobileFilterSortOpen(!mobileFilterSortOpen)}
-                className="w-full flex items-center justify-between gap-1 bg-white border border-gray-300 rounded px-2 py-1 text-xs font-normal shadow-sm hover:shadow-md transition-all"
-                style={{ color: "#374151" }}
+                className="w-full flex items-center justify-between gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs font-medium text-gray-700 shadow-sm hover:shadow-md hover:border-gray-400 transition-all"
               >
                 <span className="truncate">
                   {sortOrder === "AZ"
@@ -3557,8 +3558,8 @@ const ShiftScheduler = () => {
                       : t.sortRole}
                 </span>
                 <ChevronRight
-                  size={10}
-                  className={`flex-shrink-0 transition-transform ${
+                  size={12}
+                  className={`flex-shrink-0 transition-transform text-gray-500 ${
                     mobileFilterSortOpen ? "rotate-90" : ""
                   }`}
                 />
@@ -3569,7 +3570,7 @@ const ShiftScheduler = () => {
                     className="fixed inset-0 z-40"
                     onClick={() => setMobileFilterSortOpen(false)}
                   />
-                  <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50 min-w-[130px]">
+                  <div className="absolute top-full left-0 mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-1.5 z-50 min-w-[130px]">
                     {[
                       { val: "AZ", label: t.sortAZ },
                       { val: "ZA", label: t.sortZA },
@@ -3581,15 +3582,15 @@ const ShiftScheduler = () => {
                           setSortOrder(s.val);
                           setMobileFilterSortOpen(false);
                         }}
-                        className={`w-full text-left px-3 py-1.5 text-xs font-normal transition-colors flex items-center gap-2 ${
+                        className={`w-full text-left px-3 py-2 text-xs font-medium transition-colors flex items-center gap-2 ${
                           sortOrder === s.val
-                            ? "bg-blue-50 text-blue-700"
-                            : "text-gray-700 hover:bg-gray-50"
+                            ? "bg-indigo-600 text-white"
+                            : "text-gray-700 hover:bg-gray-100"
                         }`}
                       >
                         {s.label}
                         {sortOrder === s.val && (
-                          <CheckCircle size={10} className="ml-auto" />
+                          <CheckCircle size={12} className="ml-auto" />
                         )}
                       </button>
                     ))}
@@ -3644,7 +3645,7 @@ const ShiftScheduler = () => {
         </div>
 
         {/* Desktop Filters - Original Layout */}
-        <div className="hidden md:flex px-2 sm:px-3 md:px-4 py-0.5 bg-gray-50 border-t flex-col md:flex-row justify-between items-start md:items-center gap-0.5 md:gap-0 overflow-x-auto">
+        <div className="hidden md:flex px-2 sm:px-3 md:px-4 py-0.5 bg-gray-50 border-t flex-col md:flex-row justify-between items-start md:items-center gap-0.5 md:gap-0 overflow-x-auto overflow-y-visible relative">
           <div className="flex items-center gap-2 md:gap-4 flex-wrap text-[10px] md:text-xs">
             <div className="flex items-center gap-1 md:gap-2 hidden sm:flex">
               <Filter size={12} className="md:w-4 md:h-4" />
@@ -3806,18 +3807,76 @@ const ShiftScheduler = () => {
               </label>
             </div>
 
-            <div className="flex items-center gap-2 text-xs text-gray-600 ml-4 border-l pl-4">
-              <span className="font-bold">{t.sort}:</span>
+            <div className="flex items-center gap-2 ml-4 border-l pl-4">
+              <div className="text-xs font-semibold text-gray-600 mr-2">
+                {t.sort}:
+              </div>
+              <div className="relative">
+                <button
+                  onClick={(e) => {
+                    const rect = (
+                      e.currentTarget as HTMLElement
+                    ).getBoundingClientRect();
+                    setSortButtonPos({ top: rect.bottom + 2, left: rect.left });
+                    setDesktopFilterSortOpen(!desktopFilterSortOpen);
+                  }}
+                  className="flex items-center justify-between gap-2 bg-white border border-gray-300 rounded px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-all min-w-[120px]"
+                >
+                  <span>
+                    {sortOrder === "AZ"
+                      ? t.sortAZ
+                      : sortOrder === "ZA"
+                        ? t.sortZA
+                        : t.sortRole}
+                  </span>
+                  <ChevronRight
+                    size={12}
+                    className={`transition-transform text-gray-500 ${
+                      desktopFilterSortOpen ? "rotate-90" : ""
+                    }`}
+                  />
+                </button>
+                {desktopFilterSortOpen && sortButtonPos && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-[100]"
+                      onClick={() => setDesktopFilterSortOpen(false)}
+                    />
+                    <div
+                      className="fixed bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-[101] min-w-[140px]"
+                      style={{
+                        top: `${sortButtonPos.top}px`,
+                        left: `${sortButtonPos.left}px`,
+                      }}
+                    >
+                      {[
+                        { val: "AZ", label: t.sortAZ },
+                        { val: "ZA", label: t.sortZA },
+                        { val: "ROLE", label: t.sortRole },
+                      ].map((s) => (
+                        <button
+                          key={s.val}
+                          onClick={() => {
+                            setSortOrder(s.val);
+                            setDesktopFilterSortOpen(false);
+                          }}
+                          className={`w-full text-left px-3 py-2 text-xs font-medium transition-colors flex items-center gap-2 ${
+                            sortOrder === s.val
+                              ? "bg-indigo-600 text-white"
+                              : "text-gray-700 hover:bg-gray-100"
+                          }`}
+                        >
+                          {s.label}
+                          {sortOrder === s.val && (
+                            <CheckCircle size={12} className="ml-auto" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
-            <select
-              value={sortOrder}
-              onChange={(e) => setSortOrder(e.target.value)}
-              className="text-xs border rounded p-1"
-            >
-              <option value="AZ">{t.sortAZ}</option>
-              <option value="ZA">{t.sortZA}</option>
-              <option value="ROLE">{t.sortRole}</option>
-            </select>
           </div>
 
           <div className="flex items-center bg-white border rounded-lg shadow-sm">
