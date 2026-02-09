@@ -663,7 +663,7 @@ const ConfigPanel = ({
   const getAutoOffs = (days: number) => (days < 5 ? 1 : 2);
 
   return (
-    <div className="w-96 bg-white border-r overflow-y-auto p-4 shadow-inner z-10 animate-slide-in flex flex-col h-full print:hidden">
+    <div className="w-96 bg-white border-r overflow-y-auto p-4 shadow-inner z-10 flex flex-col h-full min-h-0 print:hidden">
       <h3 className="font-bold mb-4 text-indigo-900 flex items-center gap-2">
         <Settings size={18} /> {t.configPanelTitle}
       </h3>
@@ -1125,6 +1125,7 @@ const ShiftScheduler = () => {
   const [roleFilter, setRoleFilter] = useState("All");
   const [langFilter, setLangFilter] = useState("All");
   const [shiftFilter, setShiftFilter] = useState("All");
+  const [empFilter, setEmpFilter] = useState<number[]>([]); // Array of selected employee IDs
   const [sortOrder, setSortOrder] = useState("AZ");
   const [focusedDate, setFocusedDate] = useState<string | null>(null);
   const [mobileRoleDropdownOpen, setMobileRoleDropdownOpen] = useState(false);
@@ -1132,6 +1133,7 @@ const ShiftScheduler = () => {
   const [mobileFilterLangOpen, setMobileFilterLangOpen] = useState(false);
   const [mobileFilterShiftOpen, setMobileFilterShiftOpen] = useState(false);
   const [mobileFilterSortOpen, setMobileFilterSortOpen] = useState(false);
+  const [mobileFilterEmpOpen, setMobileFilterEmpOpen] = useState(false);
   const [focusedEmployeeId, setFocusedEmployeeId] = useState<number | null>(
     null,
   );
@@ -2052,7 +2054,10 @@ const ShiftScheduler = () => {
         }
       }
 
-      return roleMatch && langMatch && shiftMatch;
+      // Employee filter: if empFilter is not empty, only show selected employees
+      const empMatch = empFilter.length === 0 || empFilter.includes(emp.id);
+
+      return roleMatch && langMatch && shiftMatch && empMatch;
     });
 
     if (sortOrder === "AZ") {
@@ -2093,6 +2098,7 @@ const ShiftScheduler = () => {
     roleFilter,
     langFilter,
     shiftFilter,
+    empFilter,
     sortOrder,
     startDateStr,
     effectiveOverrides,
@@ -2878,7 +2884,7 @@ const ShiftScheduler = () => {
   }
 
   return (
-    <div className="flex flex-col min-h-screen h-screen w-full overflow-x-hidden bg-gray-50 text-xs sm:text-sm md:text-sm font-sans relative print:overflow-visible print:bg-white print:h-auto">
+    <div className="flex flex-col min-h-screen h-screen max-h-screen w-full overflow-x-hidden bg-gray-50 text-xs sm:text-sm md:text-sm font-sans relative print:overflow-visible print:bg-white print:h-auto">
       <style>{`
         @media print { 
           @page { size: landscape; margin: 10mm; } 
@@ -3924,7 +3930,7 @@ const ShiftScheduler = () => {
       </div>
 
       {/* Content */}
-      <div className="flex flex-col md:flex-row flex-1 min-h-0 print:overflow-visible">
+      <div className="flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden print:overflow-visible">
         <ConfigPanel
           show={canAccessSettings && showConfig}
           config={config}
@@ -3951,7 +3957,7 @@ const ShiftScheduler = () => {
 
         <div
           ref={calendarRef}
-          className="calendar-container print:overflow-visible"
+          className="calendar-container flex-1 min-h-0 min-w-0 overflow-auto print:overflow-visible"
         >
           <div className="hidden print:block mb-4">
             <h1 className="text-2xl font-bold">
@@ -3962,10 +3968,10 @@ const ShiftScheduler = () => {
             </p>
           </div>
 
-          <table className="w-full h-full border-collapse text-base sm:text-sm print:text-[8px]">
-            <thead className="bg-gray-100 sticky top-0 z-10 shadow-sm print:static">
+          <table className="w-full border-collapse text-base sm:text-sm print:text-[8px]">
+            <thead className="bg-gray-100 print:static">
               <tr>
-                <th className="p-1 md:p-1.5 text-left border-b border-r min-w-[140px] md:min-w-[200px] bg-gray-100 sticky left-0 z-20 shadow-sm print:static print:bg-white print:border-black">
+                <th className="p-1 md:p-1.5 text-left border-b border-r min-w-[140px] md:min-w-[200px] bg-gray-100 sticky left-0 top-0 z-30 shadow-sm print:static print:bg-white print:border-black">
                   <div className="flex items-center gap-1 md:gap-2">
                     {t.colaborador}
                     {sortOrder === "AZ" && (
@@ -4056,7 +4062,7 @@ const ShiftScheduler = () => {
                           }
                         }
                       }}
-                      className={`p-1 md:p-1.5 border-b min-w-[40px] md:min-w-[48px] text-center relative cursor-pointer transition-all ${
+                      className={`p-1 md:p-1.5 border-b min-w-[40px] md:min-w-[48px] text-center relative cursor-pointer transition-all sticky top-0 z-10 print:static ${
                         !isWeekWithShift ? "no-shift-week" : ""
                       } ${
                         isToday
@@ -4067,7 +4073,7 @@ const ShiftScheduler = () => {
                               ? "bg-yellow-100 border-l-2 md:border-l-4 border-r-2 md:border-r-4 border-t-2 md:border-t-4 border-yellow-500 z-10"
                               : day.isWeekend
                                 ? "bg-indigo-50 print:bg-gray-100 border-r"
-                                : "border-r"
+                                : "bg-gray-100 border-r"
                       } ${
                         day.isPtHoliday && !isFocused && !isSelected && !isToday
                           ? "bg-red-50 print:bg-gray-200"
