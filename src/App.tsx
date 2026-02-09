@@ -1123,7 +1123,7 @@ const ShiftScheduler = () => {
   isLoadingRef.current = isLoading;
 
   const [roleFilter, setRoleFilter] = useState("All");
-  const [langFilter, setLangFilter] = useState("All");
+  const [langFilter, setLangFilter] = useState<Language[]>([]); // Empty array means show all languages
   const [shiftFilter, setShiftFilter] = useState("All");
   const [empFilter, setEmpFilter] = useState<number[]>([]); // Array of selected employee IDs
   const [sortOrder, setSortOrder] = useState("AZ");
@@ -2037,7 +2037,8 @@ const ShiftScheduler = () => {
     let result = teamState.filter((emp) => {
       const roleMatch = roleFilter === "All" || emp.role === roleFilter;
       const langMatch =
-        langFilter === "All" || emp.languages.includes(langFilter as Language);
+        langFilter.length === 0 ||
+        emp.languages.some((lang) => langFilter.includes(lang));
 
       let shiftMatch = true;
       if (shiftFilter !== "All") {
@@ -3435,7 +3436,9 @@ const ShiftScheduler = () => {
                 style={{ color: "#374151" }}
               >
                 <span className="truncate">
-                  {langFilter === "All" ? "All Languages" : langFilter}
+                  {langFilter.length === 0
+                    ? "All Languages"
+                    : langFilter.join(", ")}
                 </span>
                 <ChevronRight
                   size={10}
@@ -3451,25 +3454,27 @@ const ShiftScheduler = () => {
                     onClick={() => setMobileFilterLangOpen(false)}
                   />
                   <div className="absolute top-full left-0 mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-[9999] min-w-[110px] w-56">
-                    {["All Languages", ...ALL_LANGUAGES].map((l) => (
-                      <button
+                    {ALL_LANGUAGES.map((l) => (
+                      <label
                         key={l}
-                        onClick={() => {
-                          setLangFilter(l === "All Languages" ? "All" : l);
-                          setMobileFilterLangOpen(false);
-                        }}
-                        className={`w-full text-left px-3 py-1.5 text-xs font-normal transition-colors flex items-center gap-2 ${
-                          (langFilter === "All" && l === "All Languages") ||
-                          langFilter === l
-                            ? "bg-blue-50 text-blue-700"
-                            : "text-gray-700 hover:bg-gray-50"
-                        }`}
+                        className="w-full text-left px-3 py-1.5 text-xs font-normal transition-colors flex items-center gap-2 cursor-pointer hover:bg-gray-50"
                       >
+                        <input
+                          type="checkbox"
+                          checked={langFilter.includes(l)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setLangFilter([...langFilter, l]);
+                            } else {
+                              setLangFilter(
+                                langFilter.filter((lang) => lang !== l),
+                              );
+                            }
+                          }}
+                          className="rounded"
+                        />
                         {l}
-                        {langFilter === l && (
-                          <CheckCircle size={10} className="ml-auto" />
-                        )}
-                      </button>
+                      </label>
                     ))}
                   </div>
                 </>
@@ -3697,38 +3702,27 @@ const ShiftScheduler = () => {
                 {t.linguas}:
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                <label
-                  className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border ${
-                    langFilter === "All"
-                      ? "bg-indigo-600 text-white border-indigo-600"
-                      : "bg-white text-gray-700"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="langFilter"
-                    value="All"
-                    checked={langFilter === "All"}
-                    onChange={() => setLangFilter("All")}
-                    className="sr-only"
-                  />
-                  {t.all}
-                </label>
                 {ALL_LANGUAGES.map((l) => (
                   <label
                     key={l}
-                    className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border ${
-                      langFilter === l
+                    className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border cursor-pointer ${
+                      langFilter.includes(l)
                         ? "bg-indigo-600 text-white border-indigo-600"
                         : "bg-white text-gray-700"
                     }`}
                   >
                     <input
-                      type="radio"
-                      name="langFilter"
-                      value={l}
-                      checked={langFilter === l}
-                      onChange={() => setLangFilter(l)}
+                      type="checkbox"
+                      checked={langFilter.includes(l)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setLangFilter([...langFilter, l]);
+                        } else {
+                          setLangFilter(
+                            langFilter.filter((lang) => lang !== l),
+                          );
+                        }
+                      }}
                       className="sr-only"
                     />
                     {l}
