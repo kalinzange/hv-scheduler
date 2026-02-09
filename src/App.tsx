@@ -406,7 +406,9 @@ const AnnualViewModal = ({
   colors,
   t,
 }: any) => {
-  const [selectedEmpId, setSelectedEmpId] = useState<number>(team[0]?.id || 0);
+  const [selectedEmpId, setSelectedEmpId] = useState<number>(
+    [...team].sort((a, b) => a.name.localeCompare(b.name))[0]?.id || 0,
+  );
   const [year, setYear] = useState(2026);
   if (!isOpen) return null;
   const emp = team.find((e: any) => e.id === +selectedEmpId);
@@ -450,11 +452,13 @@ const AnnualViewModal = ({
             onChange={(e) => setSelectedEmpId(+e.target.value)}
             className="border p-2 rounded text-sm w-64"
           >
-            {team.map((e: any) => (
-              <option key={e.id} value={e.id}>
-                {e.name}
-              </option>
-            ))}
+            {[...team]
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map((e: any) => (
+                <option key={e.id} value={e.id}>
+                  {e.name}
+                </option>
+              ))}
           </select>
           <div className="flex gap-2 items-center ml-4">
             <button
