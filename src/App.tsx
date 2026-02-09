@@ -3972,25 +3972,97 @@ const ShiftScheduler = () => {
             <thead className="bg-gray-100 print:static">
               <tr>
                 <th className="p-1 md:p-1.5 text-left border-b border-r min-w-[140px] md:min-w-[200px] bg-gray-100 sticky left-0 top-0 z-30 shadow-sm print:static print:bg-white print:border-black">
-                  <div className="flex items-center gap-1 md:gap-2">
-                    {t.colaborador}
-                    {sortOrder === "AZ" && (
-                      <ArrowDownAZ
-                        size={14}
-                        className="text-indigo-600 ml-1 print:hidden"
-                      />
-                    )}
-                    {sortOrder === "ZA" && (
-                      <ArrowDownZA
-                        size={14}
-                        className="text-indigo-600 ml-1 print:hidden"
-                      />
-                    )}
-                    {sortOrder === "ROLE" && (
-                      <Briefcase
-                        size={14}
-                        className="text-indigo-600 ml-1 print:hidden"
-                      />
+                  <div className="flex items-center justify-between gap-1 md:gap-2 relative group">
+                    <div className="flex items-center gap-1 md:gap-2">
+                      {t.colaborador}
+                      {sortOrder === "AZ" && (
+                        <ArrowDownAZ
+                          size={14}
+                          className="text-indigo-600 ml-1 print:hidden"
+                        />
+                      )}
+                      {sortOrder === "ZA" && (
+                        <ArrowDownZA
+                          size={14}
+                          className="text-indigo-600 ml-1 print:hidden"
+                        />
+                      )}
+                      {sortOrder === "ROLE" && (
+                        <Briefcase
+                          size={14}
+                          className="text-indigo-600 ml-1 print:hidden"
+                        />
+                      )}
+                    </div>
+
+                    {/* Excel-style filter button */}
+                    <button
+                      onClick={() =>
+                        setMobileFilterEmpOpen(!mobileFilterEmpOpen)
+                      }
+                      className={`p-0.5 rounded transition-colors print:hidden ${
+                        empFilter.length > 0
+                          ? "bg-blue-500 text-white"
+                          : "text-gray-500 hover:text-gray-700 hover:bg-gray-200"
+                      }`}
+                      title="Filter employees"
+                    >
+                      <Filter size={14} />
+                    </button>
+
+                    {/* Excel-style filter dropdown */}
+                    {mobileFilterEmpOpen && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setMobileFilterEmpOpen(false)}
+                        />
+                        <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-2xl border border-gray-300 py-1 z-[9999] min-w-[220px] max-h-96 overflow-y-auto">
+                          {/* Select All / Clear All buttons */}
+                          <div className="border-b border-gray-200 px-3 py-2 flex gap-2">
+                            <button
+                              onClick={() =>
+                                setEmpFilter(teamState.map((e) => e.id))
+                              }
+                              className="flex-1 text-xs px-2 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded hover:bg-blue-100 font-medium"
+                            >
+                              All
+                            </button>
+                            <button
+                              onClick={() => setEmpFilter([])}
+                              className="flex-1 text-xs px-2 py-1 bg-gray-100 text-gray-700 border border-gray-300 rounded hover:bg-gray-200 font-medium"
+                            >
+                              Clear
+                            </button>
+                          </div>
+
+                          {/* Employee checkboxes */}
+                          <div className="p-1">
+                            {teamState
+                              .sort((a, b) => a.name.localeCompare(b.name))
+                              .map((emp) => (
+                                <label
+                                  key={emp.id}
+                                  className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-gray-50 cursor-pointer"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={empFilter.includes(emp.id)}
+                                    onChange={() => {
+                                      setEmpFilter((prev) =>
+                                        prev.includes(emp.id)
+                                          ? prev.filter((id) => id !== emp.id)
+                                          : [...prev, emp.id],
+                                      );
+                                    }}
+                                    className="rounded w-4 h-4"
+                                  />
+                                  <span className="truncate">{emp.name}</span>
+                                </label>
+                              ))}
+                          </div>
+                        </div>
+                      </>
                     )}
                   </div>
                 </th>

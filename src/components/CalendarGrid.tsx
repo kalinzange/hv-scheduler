@@ -40,7 +40,7 @@ interface CalendarGridProps {
     e: React.MouseEvent,
     empId: number,
     dateStr: string,
-    empName: string
+    empName: string,
   ) => void;
   onEmployeeFocus: (empId: number | null) => void;
   onBulkAction: (empId: string) => void;
@@ -100,7 +100,7 @@ const CalendarGrid = memo(
               const isFocused = focusedDate === day.fullDate;
               const today = new Date();
               const todayStr = `${today.getFullYear()}-${String(
-                today.getMonth() + 1
+                today.getMonth() + 1,
               ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
               const isToday = day.fullDate === todayStr;
               const weekStart = dIdx - (dIdx % 7);
@@ -115,12 +115,12 @@ const CalendarGrid = memo(
                     isToday
                       ? "bg-green-200 ring-2 md:ring-4 ring-green-500 ring-inset font-bold z-10 print:bg-green-200"
                       : isSelected
-                      ? "bg-blue-200 border-l-2 md:border-l-4 border-r-2 md:border-r-4 border-t-2 md:border-t-4 border-blue-500 z-10"
-                      : isFocused
-                      ? "bg-yellow-100 border-l-2 md:border-l-4 border-r-2 md:border-r-4 border-t-2 md:border-t-4 border-yellow-500 z-10"
-                      : day.isWeekend
-                      ? "bg-indigo-50 print:bg-gray-100 border-r"
-                      : "border-r"
+                        ? "bg-blue-200 border-l-2 md:border-l-4 border-r-2 md:border-r-4 border-t-2 md:border-t-4 border-blue-500 z-10"
+                        : isFocused
+                          ? "bg-yellow-100 border-l-2 md:border-l-4 border-r-2 md:border-r-4 border-t-2 md:border-t-4 border-yellow-500 z-10"
+                          : day.isWeekend
+                            ? "bg-indigo-50 print:bg-gray-100 border-r"
+                            : "border-r"
                   } ${
                     day.isPtHoliday && !isFocused && !isSelected && !isToday
                       ? "bg-red-50 print:bg-gray-200"
@@ -188,10 +188,10 @@ const CalendarGrid = memo(
                   const isFocused = focusedDate === day.fullDate;
                   const today = new Date();
                   const todayStr = `${today.getFullYear()}-${String(
-                    today.getMonth() + 1
+                    today.getMonth() + 1,
                   ).padStart(2, "0")}-${String(today.getDate()).padStart(
                     2,
-                    "0"
+                    "0",
                   )}`;
                   const isToday = day.fullDate === todayStr;
                   const isLastCell = dIdx === calendarData.length - 1;
@@ -218,16 +218,16 @@ const CalendarGrid = memo(
                           isToday
                             ? "bg-green-100 border-l-4 border-r-4 border-green-500"
                             : isSelected
-                            ? "bg-blue-100 border-l-4 border-r-4 border-blue-500"
-                            : isBothFocused
-                            ? "bg-yellow-100 border-l-4 border-r-4 border-t-4 border-b-4 border-yellow-500"
-                            : isFocusedRow
-                            ? `bg-yellow-50 border-t-4 border-b-4 border-yellow-500 ${
-                                isLastCell ? "border-r-4" : ""
-                              }`
-                            : isFocused
-                            ? "bg-yellow-50 border-l-4 border-r-4 border-yellow-500"
-                            : "border-r"
+                              ? "bg-blue-100 border-l-4 border-r-4 border-blue-500"
+                              : isBothFocused
+                                ? "bg-yellow-100 border-l-4 border-r-4 border-t-4 border-b-4 border-yellow-500"
+                                : isFocusedRow
+                                  ? `bg-yellow-50 border-t-4 border-b-4 border-yellow-500 ${
+                                      isLastCell ? "border-r-4" : ""
+                                    }`
+                                  : isFocused
+                                    ? "bg-yellow-50 border-l-4 border-r-4 border-yellow-500"
+                                    : "border-r"
                         }
                         cursor-pointer hover:opacity-80
                       `}
@@ -242,8 +242,8 @@ const CalendarGrid = memo(
                             shiftOverflowInfo.hasShiftOverflow
                               ? "ring-2 ring-red-500 z-10"
                               : isRestViolation
-                              ? "ring-2 ring-orange-500 z-10"
-                              : ""
+                                ? "ring-2 ring-orange-500 z-10"
+                                : ""
                           }
                           ${
                             isPending
@@ -283,7 +283,7 @@ const CalendarGrid = memo(
         </tbody>
       </table>
     );
-  }
+  },
 );
 
 CalendarGrid.displayName = "CalendarGrid";
