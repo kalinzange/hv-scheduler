@@ -2354,10 +2354,19 @@ const ShiftScheduler = () => {
     const locale = "en-GB";
 
     // Pre-compute pending requests map for faster lookup
-    const pendingRequestsMap = new Map<string, boolean>();
+    const pendingRequestsMap = new Map<
+      string,
+      { shift: OverrideType | undefined; timestamp: number }
+    >();
     requests.forEach((r) => {
-      if (r.status === "PENDING") {
-        pendingRequestsMap.set(`${r.empId}_${r.date}`, true);
+      if (r.status !== "PENDING") return;
+      const key = `${r.empId}_${r.date}`;
+      const existing = pendingRequestsMap.get(key);
+      if (!existing || r.timestamp > existing.timestamp) {
+        pendingRequestsMap.set(key, {
+          shift: r.newShift,
+          timestamp: r.timestamp,
+        });
       }
     });
 
@@ -2369,6 +2378,7 @@ const ShiftScheduler = () => {
 
       const shifts: Record<string, OverrideType> = {};
       const pendingReqs: Record<string, boolean> = {};
+      const pendingReqShifts: Record<string, OverrideType | undefined> = {};
       const coverage = {
         M: new Set<Language>(),
         T: new Set<Language>(),
@@ -2380,7 +2390,9 @@ const ShiftScheduler = () => {
         const overrideKey = `${emp.id}_${dateStr}`;
 
         // Use pre-computed map for faster lookup
-        pendingReqs[emp.id] = pendingRequestsMap.get(overrideKey) || false;
+        const pendingInfo = pendingRequestsMap.get(overrideKey);
+        pendingReqs[emp.id] = !!pendingInfo;
+        pendingReqShifts[emp.id] = pendingInfo?.shift;
 
         // Default to day off unless manually overridden
         const shift = effectiveOverrides[overrideKey] || "F";
@@ -2418,6 +2430,7 @@ const ShiftScheduler = () => {
         lowStaff,
         counts,
         pendingReqs,
+        pendingReqShifts,
         hasIssues:
           missing.M.length > 0 ||
           missing.T.length > 0 ||
@@ -2443,6 +2456,7 @@ const ShiftScheduler = () => {
 
         const shifts: Record<string, OverrideType> = {};
         const pendingReqs: Record<string, boolean> = {};
+        const pendingReqShifts: Record<string, OverrideType | undefined> = {};
         const coverage = {
           M: new Set<Language>(),
           T: new Set<Language>(),
@@ -2453,13 +2467,9 @@ const ShiftScheduler = () => {
         teamState.forEach((emp) => {
           const overrideKey = `${emp.id}_${dateStr}`;
           let shift: OverrideType;
-          const hasPending = requests.some(
-            (r) =>
-              r.empId === emp.id &&
-              r.date === dateStr &&
-              r.status === "PENDING",
-          );
-          pendingReqs[emp.id] = hasPending;
+          const pendingInfo = pendingRequestsMap.get(overrideKey);
+          pendingReqs[emp.id] = !!pendingInfo;
+          pendingReqShifts[emp.id] = pendingInfo?.shift;
 
           // Default to day off unless manually overridden
           if (effectiveOverrides[overrideKey]) {
@@ -2500,6 +2510,7 @@ const ShiftScheduler = () => {
           lowStaff,
           counts,
           pendingReqs,
+          pendingReqShifts,
           hasIssues:
             missing.M.length > 0 ||
             missing.T.length > 0 ||
@@ -2867,7 +2878,7 @@ const ShiftScheduler = () => {
     document.body.removeChild(link);
   };
 
-  const getShiftStyle = (s: OverrideType) => {
+  const getShiftStyle = (s: OverrideType | "F") => {
     const bg = colors[s] || "#fff";
     const text = s === "N" ? "#fff" : "#000";
     return {
@@ -4500,6 +4511,13 @@ const ShiftScheduler = () => {
                         dIdx,
                       );
                       const isPending = day.pendingReqs[emp.id]; // Check for pending
+                      const pendingRequestedShift =
+                        day.pendingReqShifts?.[emp.id];
+                      const previewShift =
+                        pendingRequestedShift === undefined
+                          ? "F"
+                          : pendingRequestedShift;
+                      const showManagerPreview = isManager && isPending;
                       // Check if this cell has a pending selection (not yet submitted)
                       const cellKey = `${emp.id}_${day.fullDate}`;
                       const hasPendingSelection =
@@ -4508,12 +4526,19 @@ const ShiftScheduler = () => {
                           cellKey,
                         );
                       const pendingSelectionValue = pendingSelections[cellKey];
-                      // Display the pending selection value if it exists and is set, otherwise show the actual shift
-                      const displayShift =
-                        hasPendingSelection &&
-                        pendingSelectionValue !== undefined
+                      // Display requested shift for managers; otherwise show pending selection if any
+                      const displayShift = showManagerPreview
+                        ? previewShift
+                        : hasPendingSelection &&
+                            pendingSelectionValue !== undefined
                           ? pendingSelectionValue
                           : shift;
+                      const pendingIconClass =
+                        displayShift === "N" ? "text-white" : "text-gray-700";
+                      const showEditorPendingIcon =
+                        currentUser.role === "editor" &&
+                        emp.id === loggedInUserId &&
+                        hasPendingSelection;
                       prevShift = shift as ShiftType;
 
                       const isBothFocused = isFocusedRow && isFocused;
@@ -4585,9 +4610,9 @@ const ShiftScheduler = () => {
                                       : ""
                             }
                           >
-                            {isPending && (
-                              <div className="absolute inset-0 flex items-center justify-center bg-black/5">
-                                <Clock size={14} className="text-gray-700" />
+                            {(isPending || showEditorPendingIcon) && (
+                              <div className="absolute top-0 right-0 z-10 p-0.5">
+                                <Clock size={12} className={pendingIconClass} />
                               </div>
                             )}
                             {hasPendingSelection && (

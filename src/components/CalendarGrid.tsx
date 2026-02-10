@@ -19,6 +19,7 @@ interface CalendarDay {
   lowStaff: Record<string, boolean>;
   counts: Record<string, number>;
   pendingReqs: Record<number, boolean>;
+  pendingReqShifts?: Record<number, OverrideType | undefined>;
 }
 
 interface CalendarGridProps {
@@ -44,6 +45,7 @@ interface CalendarGridProps {
   ) => void;
   onEmployeeFocus: (empId: number | null) => void;
   onBulkAction: (empId: string) => void;
+  pendingSelections?: Record<string, OverrideType | undefined>;
   getShiftStyle: (shift: OverrideType | string) => Record<string, string>;
   checkRestViolation: (prev: string, curr: string) => boolean;
   checkShiftOverflow: (shifts: any[], index: number) => any;
@@ -200,6 +202,30 @@ const CalendarGrid = memo(
                     checkRestViolation(prevShift as string, shift as string);
                   const shiftOverflowInfo = checkShiftOverflow(empShifts, dIdx);
                   const isPending = day.pendingReqs[emp.id];
+                  const pendingRequestedShift = day.pendingReqShifts?.[emp.id];
+                  const previewShift =
+                    pendingRequestedShift === undefined
+                      ? "F"
+                      : pendingRequestedShift;
+                  const cellKey = `${emp.id}_${day.fullDate}`;
+                  const hasPendingSelection =
+                    Object.prototype.hasOwnProperty.call(
+                      pendingSelections || {},
+                      cellKey,
+                    );
+                  const pendingSelectionValue = pendingSelections?.[cellKey];
+                  const showManagerPreview = isManager && isPending;
+                  const displayShift = showManagerPreview
+                    ? previewShift
+                    : hasPendingSelection && pendingSelectionValue !== undefined
+                      ? pendingSelectionValue
+                      : shift;
+                  const pendingIconClass =
+                    displayShift === "N" ? "text-white" : "text-gray-700";
+                  const showEditorPendingIcon =
+                    currentUserRole === "editor" &&
+                    emp.id === loggedInUserId &&
+                    hasPendingSelection;
                   prevShift = shift as string;
 
                   const isBothFocused = isFocusedRow && isFocused;
@@ -251,14 +277,14 @@ const CalendarGrid = memo(
                               : ""
                           }
                         `}
-                        style={getShiftStyle(shift)}
+                        style={getShiftStyle(displayShift)}
                       >
-                        {isPending && (
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/5">
-                            <Clock size={14} className="text-gray-700" />
+                        {(isPending || showEditorPendingIcon) && (
+                          <div className="absolute top-0 right-0 z-10 p-0.5">
+                            <Clock size={12} className={pendingIconClass} />
                           </div>
                         )}
-                        {shift === "F" ? "" : shift}
+                        {displayShift === "F" ? "" : displayShift}
                         {shiftOverflowInfo.hasShiftOverflow && !isPending && (
                           <AlertCircle
                             size={10}
