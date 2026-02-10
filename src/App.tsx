@@ -2196,11 +2196,11 @@ const ShiftScheduler = () => {
       const currentShift = effectiveOverrides[key] || "F";
       const isClearNoOp =
         value === undefined && effectiveOverrides[key] === undefined;
-      const isSameAsCurrent = value === currentShift || isClearNoOp;
+      const isSameAsCurrent = value === currentShift && value !== "F";
 
       setPendingSelections((prev) => {
         const next = { ...prev };
-        if (isSameAsCurrent) {
+        if (isClearNoOp || isSameAsCurrent) {
           delete next[key];
         } else {
           next[key] = value;
