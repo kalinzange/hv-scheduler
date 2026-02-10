@@ -52,14 +52,21 @@ async function checkAndPurgeIfVersionChanged() {
         } catch {}
       }
 
+      const timestamp = new Date().toLocaleTimeString();
+
+      // Log version check details
+      console.log(`[SW ${timestamp}] Version check:`, {
+        cached: prev?.version || "none",
+        current: curr.version,
+        changed: prev && prev.version !== curr.version ? "YES" : "NO",
+      });
+
       // Always update the cached version metadata
       await meta.put(VERSION_URL, netResp);
 
       // If version changed, purge content caches and notify all clients
       if (prev && prev.version !== curr.version) {
-        console.log(
-          `[SW] Version update detected: ${prev.version} → ${curr.version}`,
-        );
+        console.log(`[SW] 🔄 PURGING CACHE: ${prev.version} → ${curr.version}`);
         await caches.delete(HTML_CACHE);
         await caches.delete(ASSET_CACHE);
         broadcastMessage("VERSION_UPDATED", {
@@ -67,10 +74,16 @@ async function checkAndPurgeIfVersionChanged() {
           current: curr.version,
           timestamp: new Date().toISOString(),
         });
+      } else if (!prev) {
+        console.log(`[SW] ✅ Initial version cached: ${curr.version}`);
+      } else {
+        console.log(`[SW] ℹ️ Version unchanged: ${curr.version}`);
       }
+    } else {
+      console.warn("[SW] Failed to fetch version.json:", netResp?.status);
     }
   } catch (err) {
-    console.warn("[SW] Version check failed:", err);
+    console.warn("[SW] Version check failed:", err.message);
   }
 }
 
