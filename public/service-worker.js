@@ -8,7 +8,7 @@ const VERSION_URL = "/hv-scheduler/version.json";
 // Install: pre-cache the minimal offline shell
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(HTML_CACHE).then((cache) => cache.add(OFFLINE_URL))
+    caches.open(HTML_CACHE).then((cache) => cache.add(OFFLINE_URL)),
   );
   self.skipWaiting();
 });
@@ -25,38 +25,54 @@ self.addEventListener("activate", (event) => {
       const keys = await caches.keys();
       const keep = new Set([HTML_CACHE, ASSET_CACHE, META_CACHE]);
       await Promise.all(
-        keys.filter((k) => !keep.has(k)).map((k) => caches.delete(k))
+        keys.filter((k) => !keep.has(k)).map((k) => caches.delete(k)),
       );
 
-      // Compare version.json; if changed, purge content caches and notify clients
-      try {
-        const meta = await caches.open(META_CACHE);
-        const prevResp = await meta.match(VERSION_URL);
-        const netResp = await fetch(VERSION_URL, { cache: "no-store" });
-        if (netResp && netResp.ok) {
-          const curr = await netResp.clone().json();
-          let prev = null;
-          if (prevResp) {
-            try {
-              prev = await prevResp.clone().json();
-            } catch {}
-          }
-          // Store latest version
-          await meta.put(VERSION_URL, netResp);
-          if (prev && prev.version !== curr.version) {
-            await caches.delete(HTML_CACHE);
-            await caches.delete(ASSET_CACHE);
-            broadcastMessage("VERSION_UPDATED", {
-              previous: prev.version,
-              current: curr.version,
-            });
-          }
-        }
-      } catch {}
-    })()
+      // Also check for version updates on activation as a fallback
+      await checkAndPurgeIfVersionChanged();
+    })(),
   );
   self.clients.claim();
 });
+
+// Helper: Check for version updates and purge cache if needed
+async function checkAndPurgeIfVersionChanged() {
+  try {
+    const meta = await caches.open(META_CACHE);
+    const prevResp = await meta.match(VERSION_URL);
+    const netResp = await fetch(VERSION_URL, { cache: "no-store" });
+
+    if (netResp && netResp.ok) {
+      const curr = await netResp.clone().json();
+      let prev = null;
+
+      if (prevResp) {
+        try {
+          prev = await prevResp.clone().json();
+        } catch {}
+      }
+
+      // Always update the cached version metadata
+      await meta.put(VERSION_URL, netResp);
+
+      // If version changed, purge content caches and notify all clients
+      if (prev && prev.version !== curr.version) {
+        console.log(
+          `[SW] Version update detected: ${prev.version} → ${curr.version}`,
+        );
+        await caches.delete(HTML_CACHE);
+        await caches.delete(ASSET_CACHE);
+        broadcastMessage("VERSION_UPDATED", {
+          previous: prev.version,
+          current: curr.version,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
+  } catch (err) {
+    console.warn("[SW] Version check failed:", err);
+  }
+}
 
 // Fetch strategy:
 // - HTML (navigations): network-first with navigation preload, cache updated; fallback to offline shell
@@ -80,20 +96,24 @@ self.addEventListener("fetch", (event) => {
           const cache = await caches.open(HTML_CACHE);
           // Keep a copy of the latest shell for offline use
           cache.put(OFFLINE_URL, response.clone());
+
+          // Check for version updates on every navigation
+          event.waitUntil(checkAndPurgeIfVersionChanged());
+
           return response;
         } catch {
           const cached = await caches.match(OFFLINE_URL);
           if (cached) return cached;
           return new Response("Offline", { status: 503 });
         }
-      })()
+      })(),
     );
     return;
   }
 
   const destination = request.destination;
   const isStaticAsset = ["script", "style", "image", "font"].includes(
-    destination
+    destination,
   );
 
   if (isStaticAsset) {
@@ -109,7 +129,7 @@ self.addEventListener("fetch", (event) => {
                 const cache = await caches.open(ASSET_CACHE);
                 await cache.put(request, fresh.clone());
               } catch {}
-            })()
+            })(),
           );
           return cached;
         }
@@ -124,7 +144,7 @@ self.addEventListener("fetch", (event) => {
           if (fallback) return fallback;
           throw err;
         }
-      })()
+      })(),
     );
     return;
   }
@@ -139,7 +159,7 @@ self.addEventListener("fetch", (event) => {
         if (cached) return cached;
         throw new Error("Network error and no cache available");
       }
-    })()
+    })(),
   );
 });
 
