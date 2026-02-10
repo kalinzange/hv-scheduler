@@ -23,6 +23,8 @@
     "dev": "vite",
     "prebuild": "node scripts/generate-version.js",
     "build": "tsc && vite build",
+    "postinstall": "node scripts/install-hook.js",
+    "install-hooks": "node scripts/install-hook.js",
     "lint": "eslint .",
     "preview": "vite preview"
   },

@@ -1,0 +1,27 @@
+#!/bin/bash
+# Git pre-push hook - Auto-build before pushing
+# Works on both Windows (Git Bash) and Mac
+
+echo "🔨 Auto-building project before push..."
+
+# Run the build (redirect to hide npm logs)
+npm run build > /dev/null 2>&1
+
+# Check if build succeeded
+if [ $? -ne 0 ]; then
+  echo "❌ Build failed! Please fix errors before pushing."
+  npm run build
+  exit 1
+fi
+
+# Stage the built files
+git add docs/ public/version.json
+
+# Check if there are staged changes from the build
+if ! git diff --cached --quiet --exit-code; then
+  echo "📦 Adding build artifacts to commit..."
+  git commit -m "chore: update build artifacts [auto-generated]" --no-verify
+fi
+
+echo "✅ Build complete! Continuing with push..."
+exit 0

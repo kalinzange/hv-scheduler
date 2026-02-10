@@ -10,6 +10,7 @@
 
 # Firebase
 .firebaserc
+.firebase/
 functions/dist/
 functions/.env.production
 
@@ -19,10 +20,20 @@ functions/.env.production
 # Dependencies
 node_modules/
 
+# Python (for Firebase Functions)
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
 # Build outputs
 dist/
 dist-ssr/
 *.local
+*.tsbuildinfo
 
 # Cache files
 .eslintcache
@@ -39,6 +50,9 @@ Thumbs.db
 *.swo
 *~
 
+# Git hooks (using custom hooks/ folder instead)
+.husky/
+
 # Logs
 logs/
 *.log
@@ -54,3 +68,4 @@ coverage/
 
 # Temporary files
 *.tmp
+*.bak

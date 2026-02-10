@@ -6,7 +6,7 @@ import App from "./App.tsx";
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <App />
-  </StrictMode>
+  </StrictMode>,
 );
 
 // Register a basic service worker for PWA installability/offline shell
@@ -21,6 +21,14 @@ if ("serviceWorker" in navigator && import.meta.env.PROD) {
   navigator.serviceWorker.addEventListener("message", (event) => {
     const data = event.data as { type?: string; data?: unknown } | undefined;
     if (data?.type === "VERSION_UPDATED") {
+      // Clear IndexedDB cache to prevent stale data
+      console.log("[SW] New version detected, clearing IndexedDB cache");
+      try {
+        indexedDB.deleteDatabase("hv-scheduler-cache");
+      } catch (error) {
+        console.warn("[SW] Failed to clear IndexedDB:", error);
+      }
+      // Force reload to get fresh code
       window.location.reload();
     }
   });
