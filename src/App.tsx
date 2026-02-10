@@ -4518,6 +4518,10 @@ const ShiftScheduler = () => {
                           ? "F"
                           : pendingRequestedShift;
                       const showManagerPreview = isManager && isPending;
+                      const showEditorRequestPreview =
+                        currentUser.role === "editor" &&
+                        emp.id === loggedInUserId &&
+                        isPending;
                       // Check if this cell has a pending selection (not yet submitted)
                       const cellKey = `${emp.id}_${day.fullDate}`;
                       const hasPendingSelection =
@@ -4527,9 +4531,10 @@ const ShiftScheduler = () => {
                         );
                       const pendingSelectionValue = pendingSelections[cellKey];
                       // Display requested shift for managers; otherwise show pending selection if any
-                      const displayShift = showManagerPreview
-                        ? previewShift
-                        : hasPendingSelection &&
+                      const displayShift =
+                        showManagerPreview || showEditorRequestPreview
+                          ? previewShift
+                          : hasPendingSelection &&
                             pendingSelectionValue !== undefined
                           ? pendingSelectionValue
                           : shift;

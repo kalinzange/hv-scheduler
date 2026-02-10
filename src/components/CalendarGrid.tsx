@@ -215,9 +215,14 @@ const CalendarGrid = memo(
                     );
                   const pendingSelectionValue = pendingSelections?.[cellKey];
                   const showManagerPreview = isManager && isPending;
-                  const displayShift = showManagerPreview
-                    ? previewShift
-                    : hasPendingSelection && pendingSelectionValue !== undefined
+                  const showEditorRequestPreview =
+                    currentUserRole === "editor" &&
+                    emp.id === loggedInUserId &&
+                    isPending;
+                  const displayShift =
+                    showManagerPreview || showEditorRequestPreview
+                      ? previewShift
+                      : hasPendingSelection && pendingSelectionValue !== undefined
                       ? pendingSelectionValue
                       : shift;
                   const pendingIconClass =
