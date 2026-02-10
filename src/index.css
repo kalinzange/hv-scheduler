@@ -13,6 +13,48 @@ body {
   background-color: #f8fafc;
   color: #0f172a;
   overflow-x: hidden;
+  transition: padding-top 0.3s ease;
+}
+
+/* Service worker update banner styling */
+#sw-update-banner {
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+#sw-update-banner code {
+  font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
+  font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  #sw-update-banner {
+    padding: 12px 16px !important;
+  }
+
+  #sw-update-banner > div {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+
+  #sw-update-banner button {
+    width: 100% !important;
+  }
+
+  #sw-update-banner p {
+    font-size: 12px !important;
+    margin: 6px 0 !important;
+  }
 }
 
 /* Prevent iOS zoom on input focus */
