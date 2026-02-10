@@ -1063,10 +1063,18 @@ const ConfigPanel = ({
 
 const ShiftScheduler = () => {
   const [isLoading, setIsLoading] = useState(true);
+  const [loadingPhase, setLoadingPhase] = useState<string>("Initializing...");
   const [initError, setInitError] = useState(false); // NOVO: Estado para erro de inicialização
   const [saveStatus, setSaveStatus] = useState<
     "saved" | "saving" | "error" | "offline"
   >("offline");
+
+  // Helper function to log and update loading phase
+  const updateLoadingPhase = (phase: string) => {
+    const timestamp = new Date().toLocaleTimeString();
+    console.log(`[${timestamp}] ${phase}`);
+    setLoadingPhase(phase);
+  };
   const [currentDate, setCurrentDate] = useState(() => {
     const today = new Date();
     return new Date(today.getFullYear(), today.getMonth(), 1);
@@ -1235,12 +1243,14 @@ const ShiftScheduler = () => {
     const initializeFirebase = () => {
       if (!FIREBASE_CONFIG.apiKey) {
         if (isComponentMounted) {
+          updateLoadingPhase("No Firebase config detected - running offline");
           setIsLoading(false);
           setSaveStatus("offline");
         }
         return;
       }
 
+      updateLoadingPhase("Initializing IndexedDB cache...");
       // Initialize IndexedDB cache for readers (reduces listener traffic by ~40%)
       cacheStore.init().catch((err) => {
         console.warn("[Init] IndexedDB cache failed:", err);
@@ -1258,11 +1268,14 @@ const ShiftScheduler = () => {
         const initAuth = async () => {
           try {
             if (auth.currentUser) {
+              updateLoadingPhase("User already authenticated");
               return;
             }
+            updateLoadingPhase("Authenticating with Firebase...");
             // Don't auto-restore tokens on page load - user must explicitly select a role
             // This prevents editor tokens from being mistakenly used in manager/admin mode
             await signInAnonymously(auth);
+            updateLoadingPhase("Authentication successful");
             retryCountRef.current = 0; // Reset retry count on success
           } catch (authError: any) {
             console.error("[Firebase] Auth Error - Please check console:", {
@@ -1278,8 +1291,12 @@ const ShiftScheduler = () => {
               "auth/invalid-user-token",
             ];
             if (!permanentErrors.includes(authError?.code)) {
+              updateLoadingPhase(
+                `Auth attempt ${retryCountRef.current + 1} failed, retrying...`,
+              );
               scheduleRetry();
             } else {
+              updateLoadingPhase("Firebase auth failed - permanent error");
               setIsLoading(false);
               setSaveStatus("offline");
             }
@@ -1304,6 +1321,7 @@ const ShiftScheduler = () => {
 
             if (docSnap.exists()) {
               const data = docSnap.data();
+              updateLoadingPhase("Received data from Firestore, processing...");
 
               // For write-enabled users (managers), only load on initial mount
               // and don't listen to updates (prevents overwriting local edits)
@@ -1314,6 +1332,7 @@ const ShiftScheduler = () => {
               // Mark this update as coming from the cloud to prevent immediate re-save
               isRemoteUpdate.current = true;
 
+              updateLoadingPhase("Processing schedule configuration...");
               // Batch state updates to reduce re-renders
               if (data.startDateStr) setStartDateStr(data.startDateStr);
               if (data.holidays) setHolidays(data.holidays);
@@ -1324,14 +1343,18 @@ const ShiftScheduler = () => {
               if (data.colors) setColors(data.colors);
               if (data.config) setConfig(data.config);
               if (data.hoursConfig) setHoursConfig(data.hoursConfig);
+
+              updateLoadingPhase("Loading team data...");
               if (data.team) setTeamState(data.team);
               if (data.requests) setRequests(data.requests);
 
+              updateLoadingPhase("Loading shift overrides...");
               // Handle overrides separately to avoid double updates
               if (data.overrides) setOverrides(data.overrides);
               if (data.publishedOverrides) {
                 setPublishedOverrides(data.publishedOverrides);
                 // Cache published data for readers (reduces 40% listener traffic)
+                updateLoadingPhase("Caching published schedule...");
                 cacheStore
                   .savePublishedOverrides(data.publishedOverrides)
                   .catch((err) => {
@@ -1353,12 +1376,14 @@ const ShiftScheduler = () => {
                 });
               }
 
+              updateLoadingPhase("Finalizing setup...");
               setInitError(false);
               setIsLoading(false);
               setSaveStatus("saved");
               retryCountRef.current = 0; // Reset retry count on success
             } else {
               // Document doesn't exist yet - initialize with defaults
+              updateLoadingPhase("No existing schedule found, using defaults");
               setInitError(false);
               setIsLoading(false);
               setSaveStatus("saved");
@@ -1378,6 +1403,7 @@ const ShiftScheduler = () => {
             // Don't set offline on every error - only on initial load failure
             // Otherwise the save effect's status gets overwritten
             if (isLoadingRef.current) {
+              updateLoadingPhase(`Error loading data: ${error.code}`);
               setInitError(false);
               setIsLoading(false);
               setSaveStatus("offline");
@@ -1396,6 +1422,9 @@ const ShiftScheduler = () => {
             code: error?.code,
             details: error,
           });
+        updateLoadingPhase(
+          `Firebase initialization failed: ${error?.message || "Unknown error"}`,
+        );
         setInitError(false);
         setIsLoading(false);
         setSaveStatus("offline");
@@ -1406,6 +1435,7 @@ const ShiftScheduler = () => {
 
     const scheduleRetry = () => {
       if (retryCountRef.current >= maxRetries) {
+        updateLoadingPhase(`Maximum retry attempts (${maxRetries}) reached`);
         return;
       }
 
@@ -1415,9 +1445,14 @@ const ShiftScheduler = () => {
       ); // Exponential backoff, max 30s
       retryCountRef.current++;
 
+      updateLoadingPhase(
+        `Retrying in ${Math.round(delayMs / 1000)}s (attempt ${retryCountRef.current}/${maxRetries})...`,
+      );
+
       retryTimeout = setTimeout(() => {
         if (isComponentMounted) {
           if (unsubscribe) unsubscribe();
+          updateLoadingPhase(`Retry attempt ${retryCountRef.current}...`);
           initializeFirebase();
         }
       }, delayMs);
@@ -2960,9 +2995,25 @@ const ShiftScheduler = () => {
 
   if (isLoading) {
     return (
-      <div className="h-screen w-full flex flex-col items-center justify-center bg-gray-50">
-        <Loader2 className="w-12 h-12 text-indigo-600 animate-spin mb-4" />
-        <h2 className="text-xl font-bold text-gray-700">{t.loading}</h2>
+      <div className="h-screen w-full flex flex-col items-center justify-center bg-gray-50 p-8">
+        <Loader2 className="w-12 h-12 text-indigo-600 animate-spin mb-6" />
+        <h2 className="text-2xl font-bold text-gray-800 mb-4">{t.loading}</h2>
+        <div className="bg-white rounded-lg shadow-md p-6 max-w-md w-full border border-gray-200">
+          <div className="flex items-start gap-3">
+            <div className="flex-1">
+              <p className="text-sm text-gray-600 font-medium">
+                {loadingPhase}
+              </p>
+              <div className="mt-4 w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                <div className="bg-indigo-600 h-full rounded-full w-1/3 animate-pulse"></div>
+              </div>
+              <p className="text-xs text-gray-500 mt-3">
+                Please wait while your schedule is being loaded. This usually
+                takes a few seconds.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -2982,9 +3033,12 @@ const ShiftScheduler = () => {
       {isLoading && (
         <div className="bg-blue-50 border-b-2 border-blue-400 text-blue-800 p-3 flex items-center gap-3 z-40 print:hidden">
           <Loader2 size={18} className="animate-spin flex-shrink-0" />
-          <span className="text-sm font-medium">
-            Loading schedule data. Please wait before making edits...
-          </span>
+          <div className="flex-1">
+            <span className="text-sm font-medium block">{loadingPhase}</span>
+            <span className="text-xs text-blue-600">
+              Loading schedule data. Please wait before making edits...
+            </span>
+          </div>
         </div>
       )}
 
