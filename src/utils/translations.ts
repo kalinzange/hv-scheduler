@@ -152,5 +152,10 @@ export const TRANSLATIONS: Record<"en", Translations> = {
     clearSelection: "Clear Selection",
     selectedDays: "Selected Days",
     applyToSelection: "Apply to Selection",
+    submitForApproval: "Submit for Approval",
+    pendingSelections: "Pending Selections",
+    noPendingSelections: "No pending selections to submit.",
+    requestsSubmitted: "request(s) submitted for approval!",
+    clearPendingSelections: "Clear Pending",
   },
 };

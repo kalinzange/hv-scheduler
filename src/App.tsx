@@ -291,9 +291,8 @@ const BulkActionModal = ({
               ))}
             </select>
           </div>
-
           {/* Date Range */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">
                 {t.startDateVac}
@@ -1212,6 +1211,15 @@ const ShiftScheduler = () => {
   });
   const [teamState, setTeamState] = useState<Employee[]>(INITIAL_TEAM);
   const [requests, setRequests] = useState<ShiftRequest[]>([]);
+  // Track pending selections for editors before submission
+  const [pendingSelections, setPendingSelections] = useState<
+    Record<string, OverrideType | undefined>
+  >({});
+  const [toast, setToast] = useState<{
+    message: string;
+    tone: "success" | "error" | "info";
+  } | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
   const retryCountRef = useRef(0);
   const maxRetries = 5;
   const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes inactivity logout
@@ -2146,24 +2154,90 @@ const ShiftScheduler = () => {
         });
         return;
       }
+      // For editors: add to pending selections instead of immediately submitting
       const [empIdStr, dateStr] = key.split("_");
       const empId = parseInt(empIdStr);
       if (empId !== loggedInUserId) return;
-      const empName = teamState.find((e) => e.id === empId)?.name || "Unknown";
-      const newReq: ShiftRequest = {
-        id: crypto.randomUUID(),
-        empId,
-        empName,
-        date: dateStr,
-        newShift: value,
-        status: "PENDING",
-        timestamp: Date.now(),
-      };
-      setRequests((prev) => [...prev, newReq]);
-      alert(t.requestSent);
+      const currentShift = effectiveOverrides[key] || "F";
+      const isClearNoOp =
+        value === undefined && effectiveOverrides[key] === undefined;
+      const isSameAsCurrent = value === currentShift || isClearNoOp;
+
+      setPendingSelections((prev) => {
+        const next = { ...prev };
+        if (isSameAsCurrent) {
+          delete next[key];
+        } else {
+          next[key] = value;
+        }
+        return next;
+      });
     },
-    [canWrite, isManager, overrides, loggedInUserId, teamState, t],
+    [canWrite, isManager, effectiveOverrides, loggedInUserId],
   );
+
+  const showToast = useCallback(
+    (message: string, tone: "success" | "error" | "info" = "info") => {
+      setToast({ message, tone });
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+      toastTimerRef.current = window.setTimeout(() => {
+        setToast(null);
+        toastTimerRef.current = null;
+      }, 3000);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Function to submit all pending selections as requests
+  const handleSubmitPendingRequests = useCallback(() => {
+    if (Object.keys(pendingSelections).length === 0) {
+      showToast(
+        t.noPendingSelections || "No pending selections to submit.",
+        "error",
+      );
+      return;
+    }
+
+    const empName =
+      teamState.find((e) => e.id === loggedInUserId)?.name || "Unknown";
+    const newRequests: ShiftRequest[] = [];
+
+    Object.entries(pendingSelections).forEach(([key, value]) => {
+      const [empIdStr, dateStr] = key.split("_");
+      const empId = parseInt(empIdStr);
+
+      if (empId === loggedInUserId) {
+        newRequests.push({
+          id: crypto.randomUUID(),
+          empId,
+          empName,
+          date: dateStr,
+          newShift: value,
+          status: "PENDING",
+          timestamp: Date.now(),
+        });
+      }
+    });
+
+    if (newRequests.length > 0) {
+      setRequests((prev) => [...prev, ...newRequests]);
+      setPendingSelections({});
+      showToast(
+        `${newRequests.length} ${t.requestsSubmitted || "request(s) submitted for approval!"}`,
+        "success",
+      );
+    }
+  }, [pendingSelections, loggedInUserId, teamState, t, showToast]);
 
   const handleUndo = () => {
     if (undoHistory.length === 0) return;
@@ -3187,6 +3261,29 @@ const ShiftScheduler = () => {
         onApply={handleBulkApply}
       />
 
+      {toast && (
+        <div className="fixed top-20 right-4 z-50 max-w-sm">
+          <div
+            className={`flex items-start gap-2 px-3 py-2 rounded-lg shadow-lg border text-sm ${
+              toast.tone === "success"
+                ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                : toast.tone === "error"
+                  ? "bg-red-50 text-red-800 border-red-200"
+                  : "bg-blue-50 text-blue-800 border-blue-200"
+            }`}
+          >
+            {toast.tone === "success" ? (
+              <CheckCircle size={16} className="mt-0.5" />
+            ) : toast.tone === "error" ? (
+              <AlertTriangle size={16} className="mt-0.5" />
+            ) : (
+              <AlertCircle size={16} className="mt-0.5" />
+            )}
+            <span>{toast.message}</span>
+          </div>
+        </div>
+      )}
+
       {editingCell && (
         <CellEditor
           cell={editingCell}
@@ -3224,6 +3321,41 @@ const ShiftScheduler = () => {
                 )}
               </button>
             )}
+
+            {/* SUBMIT FOR APPROVAL BUTTON (Visible for editors with pending selections) */}
+            {currentUser.role === "editor" &&
+              Object.keys(pendingSelections).length > 0 && (
+                <>
+                  <button
+                    onClick={handleSubmitPendingRequests}
+                    className="flex items-center px-2 sm:px-3 py-1.5 sm:py-2 bg-green-50 text-green-700 rounded hover:bg-green-100 transition border border-green-200 text-xs sm:text-sm relative"
+                    title={t.submitForApproval}
+                  >
+                    <CheckCircle
+                      size={14}
+                      className="sm:w-4 sm:h-4 mr-1 sm:mr-2"
+                    />
+                    <span className="hidden sm:inline">
+                      {t.submitForApproval}
+                    </span>
+                    <span className="sm:hidden">Submit</span>
+                    <span className="ml-1 sm:ml-2 bg-green-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold">
+                      {Object.keys(pendingSelections).length}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => setPendingSelections({})}
+                    className="flex items-center px-2 sm:px-3 py-1.5 sm:py-2 bg-red-50 text-red-700 rounded hover:bg-red-100 transition border border-red-200 text-xs sm:text-sm"
+                    title={t.clearPendingSelections}
+                  >
+                    <X size={14} className="sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+                    <span className="hidden sm:inline">
+                      {t.clearPendingSelections}
+                    </span>
+                    <span className="sm:hidden">Clear</span>
+                  </button>
+                </>
+              )}
 
             {/* BULK ACTIONS BUTTON (Visible if can write) */}
             {canWrite && (
@@ -4314,6 +4446,20 @@ const ShiftScheduler = () => {
                         dIdx,
                       );
                       const isPending = day.pendingReqs[emp.id]; // Check for pending
+                      // Check if this cell has a pending selection (not yet submitted)
+                      const cellKey = `${emp.id}_${day.fullDate}`;
+                      const hasPendingSelection =
+                        Object.prototype.hasOwnProperty.call(
+                          pendingSelections,
+                          cellKey,
+                        );
+                      const pendingSelectionValue = pendingSelections[cellKey];
+                      // Display the pending selection value if it exists and is set, otherwise show the actual shift
+                      const displayShift =
+                        hasPendingSelection &&
+                        pendingSelectionValue !== undefined
+                          ? pendingSelectionValue
+                          : shift;
                       prevShift = shift as ShiftType;
 
                       const isBothFocused = isFocusedRow && isFocused;
@@ -4356,7 +4502,7 @@ const ShiftScheduler = () => {
                               );
                             }}
                             className={`
-                              w-full h-7 md:h-8 rounded flex items-center justify-center text-xs md:text-xs font-bold shadow-sm print:shadow-none print:rounded-none border
+                              w-full h-7 md:h-8 rounded flex items-center justify-center text-xs md:text-xs font-bold shadow-sm print:shadow-none print:rounded-none border relative
                               ${
                                 shiftOverflowInfo.hasShiftOverflow
                                   ? "ring-2 ring-red-500 z-10"
@@ -4367,18 +4513,22 @@ const ShiftScheduler = () => {
                               ${
                                 isPending
                                   ? "opacity-70 ring-2 ring-yellow-400 border-yellow-500 border-dashed"
-                                  : ""
+                                  : hasPendingSelection
+                                    ? "ring-2 ring-green-400 border-green-500 border-dashed opacity-80"
+                                    : ""
                               }
                             `}
-                            style={getShiftStyle(shift)}
+                            style={getShiftStyle(displayShift)}
                             title={
                               shiftOverflowInfo.hasShiftOverflow
                                 ? "ShiftOverflow (>40h)"
                                 : isPending
                                   ? t.pending
-                                  : isRestViolation
-                                    ? t.restWarn
-                                    : ""
+                                  : hasPendingSelection
+                                    ? `${t.pendingSelections || "Pending Selection"} - Click Submit to request approval`
+                                    : isRestViolation
+                                      ? t.restWarn
+                                      : ""
                             }
                           >
                             {isPending && (
@@ -4386,7 +4536,10 @@ const ShiftScheduler = () => {
                                 <Clock size={14} className="text-gray-700" />
                               </div>
                             )}
-                            {shift === "F" ? "" : shift}
+                            {hasPendingSelection && (
+                              <div className="absolute top-0 right-0 w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                            )}
+                            {displayShift === "F" ? "" : displayShift}
                             {shiftOverflowInfo.hasShiftOverflow &&
                               !isPending && (
                                 <AlertCircle
