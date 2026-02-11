@@ -45,6 +45,7 @@ import {
   Undo,
   Redo,
 } from "lucide-react";
+import bcrypt from "bcryptjs";
 
 // --- FIREBASE IMPORTS ---
 import { initializeApp, getApp } from "firebase/app";
@@ -645,16 +646,18 @@ const ConfigPanel = ({
   };
 
   // --- NEW FUNCTIONS: ADD/REMOVE EMPLOYEE ---
-  const handleAddEmployee = () => {
+  const handleAddEmployee = async () => {
     const newId =
       team.length > 0 ? Math.max(...team.map((e: any) => e.id)) + 1 : 1;
+    const hashedPassword = await bcrypt.hash("1234", 10);
     const newEmp: Employee = {
       id: newId,
       name: "Novo Colaborador",
       role: "GCC",
       languages: ["EN"],
       offset: 0,
-      password: "1234",
+      password: hashedPassword,
+      requirePasswordChange: true,
       rotationMode: "STANDARD",
     };
     setTeam([...team, newEmp]);
@@ -1270,6 +1273,12 @@ const ShiftScheduler = () => {
   useEffect(() => {
     if (currentUser.role === "admin") {
       setAdminView("dashboard");
+    }
+  }, [currentUser.role]);
+
+  useEffect(() => {
+    if (currentUser.role !== "admin") {
+      setShowAdmin(false);
     }
   }, [currentUser.role]);
 
@@ -3336,7 +3345,7 @@ const ShiftScheduler = () => {
           />
         )}
 
-        {showAdmin && (
+        {showAdmin && isAdmin && (
           <AdminPanel
             show={showAdmin}
             team={teamState}
