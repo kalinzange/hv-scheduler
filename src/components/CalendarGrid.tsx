@@ -222,9 +222,10 @@ const CalendarGrid = memo(
                   const displayShift =
                     showManagerPreview || showEditorRequestPreview
                       ? previewShift
-                      : hasPendingSelection && pendingSelectionValue !== undefined
-                      ? pendingSelectionValue
-                      : shift;
+                      : hasPendingSelection &&
+                          pendingSelectionValue !== undefined
+                        ? pendingSelectionValue
+                        : shift;
                   const pendingIconClass =
                     displayShift === "N" ? "text-white" : "text-gray-700";
                   const showEditorPendingIcon =

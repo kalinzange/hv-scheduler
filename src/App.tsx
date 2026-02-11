@@ -16,7 +16,6 @@ import {
   CheckCircle,
   Settings,
   Download,
-  Printer,
   ArrowDownAZ,
   X,
   Clock,
@@ -38,7 +37,6 @@ import {
   Inbox,
   ArrowDownZA,
   Briefcase,
-  Languages as LangIcon,
   Layers,
   Plus,
   Cloud,
@@ -76,6 +74,9 @@ import type {
   ShiftRequest,
   RoleId,
   LangCode,
+  FeatureKey,
+  FeatureToggles,
+  NonAdminRoleId,
 } from "./types";
 import {
   FIREBASE_CONFIG,
@@ -86,10 +87,12 @@ import {
   MONTHS,
   DEFAULT_HOLIDAYS,
   INITIAL_TEAM,
+  DEFAULT_FEATURE_TOGGLES,
 } from "./config/constants";
 import { TRANSLATIONS } from "./utils/translations";
 import { saveBatcher } from "./utils/saveBatcher";
 import { cacheStore } from "./utils/cacheStore";
+import { AdminDashboard } from "./components/AdminDashboard";
 
 // --- LAZY-LOADED COMPONENTS (Code Splitting for Better Performance) ---
 const LoginModal = lazy(() =>
@@ -1089,6 +1092,9 @@ const ShiftScheduler = () => {
   const [showRequests, setShowRequests] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [adminView, setAdminView] = useState<"dashboard" | "calendar">(
+    "dashboard",
+  );
   const [lang] = useState<LangCode>("en");
   const [editingCell, setEditingCell] = useState<{
     key: string;
@@ -1104,6 +1110,9 @@ const ShiftScheduler = () => {
   const [loggedInUserId, setLoggedInUserId] = useState<number>(0);
   const [preSelectedBulkId, setPreSelectedBulkId] = useState<string>("");
   const [tokenExpiredMsg, setTokenExpiredMsg] = useState<string>(""); // Message when token expires
+  const [featureToggles, setFeatureToggles] = useState<FeatureToggles>(
+    DEFAULT_FEATURE_TOGGLES,
+  );
 
   // Ref to prevent infinite loops between Firebase sync and local save
   const isRemoteUpdate = useRef(false);
@@ -1125,9 +1134,63 @@ const ShiftScheduler = () => {
   const hasAppendedRef = useRef(false);
   const savedScrollRef = useRef<number>(0);
 
-  const canWrite = currentUser.permissions.includes("write");
-  const canAccessSettings = currentUser.role === "manager";
-  const isManager = currentUser.role === "manager";
+  const isAdmin = currentUser.role === "admin";
+  const canManage = currentUser.role === "manager";
+
+  const normalizeFeatureToggles = (incoming?: FeatureToggles) => {
+    if (!incoming) return DEFAULT_FEATURE_TOGGLES;
+    return {
+      roles: {
+        viewer: {
+          ...DEFAULT_FEATURE_TOGGLES.roles.viewer,
+          ...incoming.roles?.viewer,
+        },
+        editor: {
+          ...DEFAULT_FEATURE_TOGGLES.roles.editor,
+          ...incoming.roles?.editor,
+        },
+        manager: {
+          ...DEFAULT_FEATURE_TOGGLES.roles.manager,
+          ...incoming.roles?.manager,
+        },
+      },
+    };
+  };
+
+  const isFeatureEnabled = useCallback(
+    (feature: FeatureKey, role: RoleId) => {
+      if (role === "admin") return true;
+      return featureToggles.roles[role]?.[feature] ?? true;
+    },
+    [featureToggles],
+  );
+
+  const canWrite =
+    !isAdmin &&
+    currentUser.permissions.includes("write") &&
+    isFeatureEnabled("editSchedule", currentUser.role);
+  const canAccessSettings =
+    !isAdmin && canManage && isFeatureEnabled("configPanel", currentUser.role);
+  const canViewCalendar =
+    !isAdmin && isFeatureEnabled("viewCalendar", currentUser.role);
+  const canViewStats =
+    !isAdmin && isFeatureEnabled("viewStats", currentUser.role);
+  const canViewAnnual =
+    !isAdmin && isFeatureEnabled("viewAnnual", currentUser.role);
+  const canViewRequests =
+    !isAdmin && canManage && isFeatureEnabled("viewRequests", currentUser.role);
+  const canBulkActions =
+    !isAdmin && canWrite && isFeatureEnabled("bulkActions", currentUser.role);
+  const canPublish =
+    !isAdmin &&
+    canManage &&
+    isFeatureEnabled("publishSchedule", currentUser.role);
+  const canExportCsv =
+    !isAdmin && canManage && isFeatureEnabled("exportCsv", currentUser.role);
+  const canBackupTools =
+    !isAdmin && canManage && isFeatureEnabled("fileBackup", currentUser.role);
+  const canViewCoverage =
+    !isAdmin && canWrite && isFeatureEnabled("viewCoverage", currentUser.role);
 
   // Update refs whenever these values change so snapshot listener always has current values
   canWriteRef.current = canWrite;
@@ -1198,11 +1261,31 @@ const ShiftScheduler = () => {
 
   // Track if manager has made changes since last publish
   useEffect(() => {
-    if (!isManager) return;
+    if (!canManage) return;
     const hasChanges =
       JSON.stringify(overrides) !== JSON.stringify(publishedOverrides);
     setHasUnpublishedChanges(hasChanges);
-  }, [overrides, publishedOverrides, isManager]);
+  }, [overrides, publishedOverrides, canManage]);
+
+  useEffect(() => {
+    if (currentUser.role === "admin") {
+      setAdminView("dashboard");
+    }
+  }, [currentUser.role]);
+
+  useEffect(() => {
+    if (!canViewStats) setShowStats(false);
+    if (!canViewAnnual) setShowAnnual(false);
+    if (!canViewRequests) setShowRequests(false);
+    if (!canBulkActions) setShowBulkModal(false);
+    if (!canAccessSettings) setShowConfig(false);
+  }, [
+    canViewStats,
+    canViewAnnual,
+    canViewRequests,
+    canBulkActions,
+    canAccessSettings,
+  ]);
 
   const [config, setConfig] = useState<RotationConfig>({
     morningDays: 5,
@@ -1343,6 +1426,8 @@ const ShiftScheduler = () => {
               if (data.colors) setColors(data.colors);
               if (data.config) setConfig(data.config);
               if (data.hoursConfig) setHoursConfig(data.hoursConfig);
+              if (data.featureToggles)
+                setFeatureToggles(normalizeFeatureToggles(data.featureToggles));
 
               updateLoadingPhase("Loading team data...");
               if (data.team) setTeamState(data.team);
@@ -1687,6 +1772,7 @@ const ShiftScheduler = () => {
       lastPublished: isEditor ? undefined : lastPublished || null,
       config: isEditor ? undefined : config,
       hoursConfig: isEditor ? undefined : hoursConfig,
+      featureToggles: isEditor ? undefined : featureToggles,
       team: isEditor ? undefined : teamState, // Editors cannot save team data
       requests,
     });
@@ -1701,6 +1787,7 @@ const ShiftScheduler = () => {
     overrides,
     config,
     hoursConfig,
+    featureToggles,
     teamState,
     requests,
     isLoading,
@@ -1722,6 +1809,7 @@ const ShiftScheduler = () => {
   };
 
   const handlePublish = async () => {
+    if (!canPublish) return;
     const newPublishedOverrides = { ...overrides };
     const newLastPublished = Date.now();
 
@@ -1786,6 +1874,7 @@ const ShiftScheduler = () => {
           lastPublished: newLastPublished,
           config,
           hoursConfig,
+          featureToggles,
           team: teamState,
           requests,
           lastUpdated: Date.now(),
@@ -1909,6 +1998,7 @@ const ShiftScheduler = () => {
           setLoggedInName("Admin");
           setLoggedInUserId(0);
           setFocusedEmployeeId(null);
+          setAdminView("dashboard");
         } else if (targetRoleToUse === "editor") {
           setCurrentUser(ROLES.EDITOR);
           if (typeof claimUserId === "number") {
@@ -1951,6 +2041,7 @@ const ShiftScheduler = () => {
     } else if (role === "admin") {
       setCurrentUser(ROLES.ADMIN);
       setFocusedEmployeeId(null);
+      setAdminView("dashboard");
     } else if (role === "editor") {
       setCurrentUser(ROLES.EDITOR);
       // Auto-focus the logged-in Escalator's row
@@ -1989,6 +2080,7 @@ const ShiftScheduler = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSaveFile = () => {
+    if (!canBackupTools) return;
     const data = {
       version: 1,
       date: new Date().toISOString(),
@@ -2003,6 +2095,7 @@ const ShiftScheduler = () => {
         overrides,
         config,
         hoursConfig,
+        featureToggles,
         team: teamState,
         requests,
       },
@@ -2022,6 +2115,7 @@ const ShiftScheduler = () => {
   };
 
   const handleLoadFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!canBackupTools) return;
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
@@ -2065,6 +2159,8 @@ const ShiftScheduler = () => {
 
           if (s.config) setConfig(s.config);
           if (s.hoursConfig) setHoursConfig(s.hoursConfig);
+          if (s.featureToggles)
+            setFeatureToggles(normalizeFeatureToggles(s.featureToggles));
           if (s.team) setTeamState(s.team);
           if (s.requests) setRequests(s.requests);
           alert("Configuration loaded successfully!");
@@ -2082,8 +2178,26 @@ const ShiftScheduler = () => {
 
   const t = TRANSLATIONS[lang];
 
+  const showCalendarView = canViewCalendar;
+  const showAdminDashboard = isAdmin && adminView === "dashboard";
+
+  const handleToggleFeature = useCallback(
+    (role: NonAdminRoleId, feature: FeatureKey) => {
+      setFeatureToggles((prev) => ({
+        roles: {
+          ...prev.roles,
+          [role]: {
+            ...prev.roles[role],
+            [feature]: !prev.roles[role][feature],
+          },
+        },
+      }));
+    },
+    [],
+  );
+
   // Use publishedOverrides for non-managers, draftOverrides for managers
-  const effectiveOverrides = isManager ? overrides : publishedOverrides;
+  const effectiveOverrides = canManage ? overrides : publishedOverrides;
 
   const filteredTeam = useMemo(() => {
     let result = teamState.filter((emp) => {
@@ -2178,7 +2292,7 @@ const ShiftScheduler = () => {
   const handleOverride = useCallback(
     (key: string, value: OverrideType | undefined) => {
       if (!canWrite) return;
-      if (isManager) {
+      if (canManage) {
         setUndoHistory((prev) => [...prev, { ...overrides }]);
         setRedoHistory([]);
         setOverrides((prev) => {
@@ -2190,7 +2304,7 @@ const ShiftScheduler = () => {
         return;
       }
       // For editors: add to pending selections instead of immediately submitting
-      const [empIdStr, dateStr] = key.split("_");
+      const [empIdStr] = key.split("_");
       const empId = parseInt(empIdStr);
       if (empId !== loggedInUserId) return;
       const currentShift = effectiveOverrides[key] || "F";
@@ -2208,7 +2322,7 @@ const ShiftScheduler = () => {
         return next;
       });
     },
-    [canWrite, isManager, effectiveOverrides, loggedInUserId],
+    [canWrite, canManage, effectiveOverrides, loggedInUserId],
   );
 
   const showToast = useCallback(
@@ -2235,6 +2349,7 @@ const ShiftScheduler = () => {
 
   // Function to submit all pending selections as requests
   const handleSubmitPendingRequests = useCallback(() => {
+    if (!canWrite) return;
     if (Object.keys(pendingSelections).length === 0) {
       showToast(
         t.noPendingSelections || "No pending selections to submit.",
@@ -2272,7 +2387,7 @@ const ShiftScheduler = () => {
         "success",
       );
     }
-  }, [pendingSelections, loggedInUserId, teamState, t, showToast]);
+  }, [pendingSelections, loggedInUserId, teamState, t, showToast, canWrite]);
 
   const handleUndo = () => {
     if (undoHistory.length === 0) return;
@@ -2297,7 +2412,7 @@ const ShiftScheduler = () => {
       end: string,
       type: OverrideType | undefined,
     ) => {
-      if (!canWrite) return;
+      if (!canBulkActions) return;
       setUndoHistory((prev) => [...prev, { ...overrides }]);
       setRedoHistory([]);
       const applyToEmp = (empId: number) => {
@@ -2317,13 +2432,13 @@ const ShiftScheduler = () => {
 
       if (typeof targetId === "number" || !isNaN(Number(targetId))) {
         const empId = Number(targetId);
-        if (!isManager && empId !== loggedInUserId) {
+        if (!canManage && empId !== loggedInUserId) {
           alert(t.cantEditOthers);
           return;
         }
         setOverrides(applyToEmp(empId));
       } else if (targetId === "ALL") {
-        if (!isManager) {
+        if (!canManage) {
           alert(t.permissionDenied);
           return;
         }
@@ -2343,7 +2458,7 @@ const ShiftScheduler = () => {
         setOverrides(batchOverrides);
       }
     },
-    [isManager, loggedInUserId, t, overrides, teamState],
+    [canBulkActions, canManage, loggedInUserId, t, overrides, teamState],
   );
 
   const calendarData = useMemo(() => {
@@ -2742,7 +2857,7 @@ const ShiftScheduler = () => {
         if (s === "N") {
           n++;
           hours += hoursConfig.N;
-          extraHours += 8;
+          extraHours += 7;
         }
         if (s === "V") v++;
         if (["M", "T", "N"].includes(s)) {
@@ -2825,6 +2940,7 @@ const ShiftScheduler = () => {
   }, [calendarData, filteredTeam]);
 
   const handleExportCSV = () => {
+    if (!canExportCsv) return;
     const headers = [
       t.colaborador,
       t.cargo,
@@ -2886,93 +3002,6 @@ const ShiftScheduler = () => {
       color: text,
       borderColor: s === "N" ? "transparent" : "rgba(0,0,0,0.1)",
     };
-  };
-
-  const handleExportImage = async (format: "png" | "jpeg") => {
-    try {
-      // Dynamically import html2canvas
-      // @ts-ignore
-      const html2canvas = (await import("html2canvas")).default;
-
-      const element = document.querySelector("table");
-      if (!element) {
-        alert("Could not find table to export");
-        return;
-      }
-
-      // Clone the element to avoid modifying the original
-      const clone = element.cloneNode(true) as HTMLElement;
-
-      // Function to recursively remove problematic Tailwind classes
-      const removeProblematicClasses = (el: HTMLElement) => {
-        // List of Tailwind classes that might contain oklch or other unsupported colors
-        const problematicPatterns = [
-          /text-\w+-\d+/, // text colors
-          /bg-\w+-\d+/, // background colors
-          /border-\w+-\d+/, // border colors
-          /ring-\w+-\d+/, // ring colors
-          /divide-\w+-\d+/, // divide colors
-          /from-\w+-\d+/, // gradient from
-          /to-\w+-\d+/, // gradient to
-          /via-\w+-\d+/, // gradient via
-        ];
-
-        Array.from(el.classList).forEach((cls) => {
-          if (problematicPatterns.some((pattern) => pattern.test(cls))) {
-            el.classList.remove(cls);
-          }
-        });
-
-        // Recursively process children
-        Array.from(el.children).forEach((child) => {
-          removeProblematicClasses(child as HTMLElement);
-        });
-      };
-
-      // Remove problematic classes from clone
-      removeProblematicClasses(clone);
-
-      // Append clone to body temporarily
-      const container = document.createElement("div");
-      container.style.position = "fixed";
-      container.style.left = "-9999px";
-      container.style.top = "-9999px";
-      container.appendChild(clone);
-      document.body.appendChild(container);
-
-      // Wait a bit for the DOM to update
-      setTimeout(async () => {
-        try {
-          const canvas = await html2canvas(clone, {
-            scale: 2,
-            useCORS: true,
-            logging: false,
-            backgroundColor: "#ffffff",
-            allowTaint: true,
-          });
-
-          const link = document.createElement("a");
-          link.href = canvas.toDataURL(
-            `image/${format === "jpeg" ? "jpeg" : "png"}`,
-          );
-          link.download = `schedule_${
-            currentDate.getMonth() + 1
-          }_${currentDate.getFullYear()}.${format}`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-        } catch (err) {
-          if (import.meta.env.DEV) console.error("Error exporting image:", err);
-          alert("Error exporting image. Please try again.");
-        } finally {
-          // Clean up the temporary container
-          document.body.removeChild(container);
-        }
-      }, 100);
-    } catch (err) {
-      if (import.meta.env.DEV) console.error("Error loading html2canvas:", err);
-      alert("Error with export library. Please try again.");
-    }
   };
 
   const roles = useMemo(
@@ -3275,7 +3304,7 @@ const ShiftScheduler = () => {
           />
         )}
 
-        {showRequests && (
+        {showRequests && canViewRequests && (
           <RequestsModal
             isOpen={showRequests}
             onClose={() => setShowRequests(false)}
@@ -3286,7 +3315,7 @@ const ShiftScheduler = () => {
           />
         )}
 
-        {showStats && (
+        {showStats && canViewStats && (
           <StatsModal
             isOpen={showStats}
             onClose={() => setShowStats(false)}
@@ -3296,7 +3325,7 @@ const ShiftScheduler = () => {
           />
         )}
 
-        {showAnnual && (
+        {showAnnual && canViewAnnual && (
           <AnnualViewModal
             isOpen={showAnnual}
             onClose={() => setShowAnnual(false)}
@@ -3312,19 +3341,22 @@ const ShiftScheduler = () => {
             show={showAdmin}
             team={teamState}
             setTeam={setTeamState}
+            onClose={() => setShowAdmin(false)}
           />
         )}
       </Suspense>
 
-      <BulkActionModal
-        isOpen={showBulkModal}
-        onClose={() => setShowBulkModal(false)}
-        t={t}
-        team={teamState}
-        currentUser={currentUser}
-        preSelectedId={preSelectedBulkId}
-        onApply={handleBulkApply}
-      />
+      {canBulkActions && (
+        <BulkActionModal
+          isOpen={showBulkModal}
+          onClose={() => setShowBulkModal(false)}
+          t={t}
+          team={teamState}
+          currentUser={currentUser}
+          preSelectedId={preSelectedBulkId}
+          onApply={handleBulkApply}
+        />
+      )}
 
       {toast && (
         <div className="fixed top-20 right-4 z-50 max-w-sm">
@@ -3360,828 +3392,862 @@ const ShiftScheduler = () => {
       )}
 
       {/* Header */}
-      <div className="bg-white flex flex-col shadow-sm z-20 print:hidden flex-shrink-0">
-        {/* Top Row: Title & Actions */}
-        <div className="px-2 sm:px-3 md:px-4 py-0.5 md:py-1 md:border-b flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 md:gap-0">
-          <div>
-            <h1 className="text-sm sm:text-base md:text-lg font-bold text-gray-800 leading-tight">
-              {t.title}
-            </h1>
-          </div>
-          <div className="flex items-center space-x-0.5 sm:space-x-1 md:space-x-1 flex-wrap gap-0.5 md:gap-0 w-full sm:w-auto">
-            {/* MANAGER INBOX BUTTON */}
-            {isManager && (
-              <button
-                onClick={() => setShowRequests(true)}
-                className="flex items-center px-1.5 sm:px-2 py-1 sm:py-1.5 bg-orange-50 text-orange-700 rounded hover:bg-orange-100 transition border border-orange-200 relative text-xs sm:text-sm"
-                title={t.requests}
-              >
-                <Inbox size={14} className="sm:w-4 sm:h-4 mr-1 sm:mr-2" />
-                <span className="hidden sm:inline">Requests</span>
-                <span className="sm:hidden">Req</span>
-                {pendingCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[10px] font-bold border-2 border-white animate-pulse">
-                    {pendingCount}
-                  </span>
-                )}
-              </button>
-            )}
-
-            {/* SUBMIT FOR APPROVAL BUTTON (Visible for editors with pending selections) */}
-            {currentUser.role === "editor" &&
-              Object.keys(pendingSelections).length > 0 && (
-                <>
-                  <button
-                    onClick={handleSubmitPendingRequests}
-                    className="flex items-center px-2 sm:px-3 py-1.5 sm:py-2 bg-green-50 text-green-700 rounded hover:bg-green-100 transition border border-green-200 text-xs sm:text-sm relative"
-                    title={t.submitForApproval}
-                  >
-                    <CheckCircle
-                      size={14}
-                      className="sm:w-4 sm:h-4 mr-1 sm:mr-2"
-                    />
-                    <span className="hidden sm:inline">
-                      {t.submitForApproval}
-                    </span>
-                    <span className="sm:hidden">Submit</span>
-                    <span className="ml-1 sm:ml-2 bg-green-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold">
-                      {Object.keys(pendingSelections).length}
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => setPendingSelections({})}
-                    className="flex items-center px-2 sm:px-3 py-1.5 sm:py-2 bg-red-50 text-red-700 rounded hover:bg-red-100 transition border border-red-200 text-xs sm:text-sm"
-                    title={t.clearPendingSelections}
-                  >
-                    <X size={14} className="sm:w-4 sm:h-4 mr-1 sm:mr-2" />
-                    <span className="hidden sm:inline">
-                      {t.clearPendingSelections}
-                    </span>
-                    <span className="sm:hidden">Clear</span>
-                  </button>
-                </>
-              )}
-
-            {/* BULK ACTIONS BUTTON (Visible if can write) */}
-            {canWrite && (
-              <button
-                onClick={() => {
-                  setPreSelectedBulkId(
-                    currentUser.role === "editor" ? String(loggedInUserId) : "",
-                  );
-                  setShowBulkModal(true);
-                }}
-                className="flex items-center px-2 sm:px-3 py-1.5 sm:py-2 bg-purple-50 text-purple-700 rounded hover:bg-purple-100 transition border border-purple-200 text-xs sm:text-sm"
-                title={t.bulkTitle}
-              >
-                <Layers size={14} className="sm:w-4 sm:h-4 mr-1 sm:mr-2" />
-                <span className="hidden sm:inline">{t.bulkActions}</span>
-                <span className="sm:hidden">Bulk</span>
-              </button>
-            )}
-
-            {isManager && (
-              <div className="flex items-center bg-gray-100 rounded p-1 mr-2">
+      {!isAdmin && (
+        <div className="bg-white flex flex-col shadow-sm z-20 print:hidden flex-shrink-0">
+          {/* Top Row: Title & Actions */}
+          <div className="px-2 sm:px-3 md:px-4 py-0.5 md:py-1 md:border-b flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 md:gap-0">
+            <div>
+              <h1 className="text-sm sm:text-base md:text-lg font-bold text-gray-800 leading-tight">
+                {t.title}
+              </h1>
+            </div>
+            <div className="flex items-center space-x-0.5 sm:space-x-1 md:space-x-1 flex-wrap gap-0.5 md:gap-0 w-full sm:w-auto">
+              {/* MANAGER INBOX BUTTON */}
+              {canViewRequests && (
                 <button
-                  onClick={handleSaveFile}
-                  className="p-2 hover:bg-white rounded text-gray-600"
-                  title={t.saveFile}
+                  onClick={() => setShowRequests(true)}
+                  className="flex items-center px-1.5 sm:px-2 py-1 sm:py-1.5 bg-orange-50 text-orange-700 rounded hover:bg-orange-100 transition border border-orange-200 relative text-xs sm:text-sm"
+                  title={t.requests}
                 >
-                  <FileJson size={16} />
-                </button>
-                <label
-                  className="p-2 hover:bg-white rounded text-gray-600 cursor-pointer"
-                  title={t.loadFile}
-                >
-                  <Upload size={16} />
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleLoadFile}
-                    className="hidden"
-                    accept=".json"
-                  />
-                </label>
-              </div>
-            )}
-
-            <button
-              onClick={() => setShowAnnual(true)}
-              className="hidden md:flex items-center px-3 py-2 bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition border border-blue-200"
-            >
-              <Calendar size={16} className="mr-2" /> {t.annual}
-            </button>
-            <button
-              onClick={() => setShowStats(true)}
-              className="hidden md:flex items-center px-3 py-2 bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100 transition border border-indigo-200"
-            >
-              <BarChart3 size={16} className="mr-2" /> {t.stats}
-            </button>
-
-            {isManager && (
-              <button
-                onClick={handleExportCSV}
-                className="hidden md:flex items-center px-3 py-2 bg-green-50 text-green-700 rounded hover:bg-green-100 transition border border-green-200"
-              >
-                <Download size={16} className="mr-2" /> {t.exportCsv}
-              </button>
-            )}
-
-            {isManager && (
-              <div className="flex flex-col gap-0.5">
-                <button
-                  onClick={handlePublish}
-                  disabled={!hasUnpublishedChanges || isLoading}
-                  className={`flex items-center px-3 py-2 rounded transition border ${
-                    hasUnpublishedChanges && !isLoading
-                      ? "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 cursor-pointer"
-                      : "bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed"
-                  }`}
-                  title={
-                    isLoading
-                      ? "Loading schedule data..."
-                      : hasUnpublishedChanges
-                        ? "Publish schedule to viewers"
-                        : "No unpublished changes"
-                  }
-                >
-                  {isLoading && (
-                    <Loader2 size={16} className="mr-2 animate-spin" />
-                  )}
-                  {!isLoading && <Upload size={16} className="mr-2" />}
-                  {isLoading ? "Loading..." : "Publish"}{" "}
-                  {hasUnpublishedChanges && !isLoading && (
-                    <span className="ml-1 font-bold">*</span>
+                  <Inbox size={14} className="sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+                  <span className="hidden sm:inline">Requests</span>
+                  <span className="sm:hidden">Req</span>
+                  {pendingCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[10px] font-bold border-2 border-white animate-pulse">
+                      {pendingCount}
+                    </span>
                   )}
                 </button>
-                {lastPublished && (
-                  <div className="text-[9px] text-gray-500 px-1 text-center">
-                    Last: {new Date(lastPublished).toLocaleString()}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Undo/Redo Buttons */}
-            {isManager && (
-              <>
-                <button
-                  onClick={handleUndo}
-                  disabled={undoHistory.length === 0}
-                  className="flex items-center px-3 py-2 bg-gray-50 text-gray-700 rounded hover:bg-gray-100 transition border border-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
-                  title={t.undo}
-                >
-                  <Undo size={16} className="mr-2" />
-                  {t.undo}
-                </button>
-                <button
-                  onClick={handleRedo}
-                  disabled={redoHistory.length === 0}
-                  className="flex items-center px-3 py-2 bg-gray-50 text-gray-700 rounded hover:bg-gray-100 transition border border-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
-                  title={t.redo}
-                >
-                  <Redo size={16} className="mr-2" />
-                  {t.redo}
-                </button>
-              </>
-            )}
-
-            {canAccessSettings && (
-              <button
-                onClick={() => setShowConfig(!showConfig)}
-                className={`hidden md:flex items-center px-3 py-2 rounded transition ${
-                  showConfig
-                    ? "bg-indigo-100 text-indigo-800"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-              >
-                <Settings size={16} className="mr-2" /> {t.config}
-              </button>
-            )}
-
-            {currentUser.permissions.includes("system") ? (
-              <button
-                onClick={() => setShowAdmin(!showAdmin)}
-                className={`flex items-center px-3 py-2 rounded transition ${
-                  showAdmin
-                    ? "bg-red-100 text-red-800"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-              >
-                <Shield size={16} className="mr-2" /> Admin
-              </button>
-            ) : null}
-          </div>
-        </div>
-
-        {/* Viewer notice when showing draft (unpublished) schedule */}
-        {!isManager && Object.keys(publishedOverrides).length === 0 && (
-          <div className="px-2 sm:px-3 md:px-4 py-1 bg-amber-50 text-amber-800 border-t border-b border-amber-200 text-xs">
-            No published schedule yet. Please contact a manager to publish.
-          </div>
-        )}
-
-        {/* Bottom Row: Filters & Nav */}
-        {/* Mobile Filters - Custom Dropdowns */}
-        <div className="md:hidden px-2 py-2 bg-gray-50 border-t flex flex-col gap-2 relative z-50 filter-container">
-          <div className="flex items-center gap-1">
-            {/* Role Filter - Custom Dropdown */}
-            <div className="relative flex-1">
-              <button
-                onClick={() => setMobileFilterRoleOpen(!mobileFilterRoleOpen)}
-                className="w-full flex items-center justify-between gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs font-medium text-gray-700 shadow-sm hover:shadow-md hover:border-gray-400 transition-all"
-              >
-                <span className="truncate">
-                  {roleFilter === "All" ? "All Roles" : roleFilter}
-                </span>
-                <ChevronRight
-                  size={12}
-                  className={`flex-shrink-0 transition-transform text-gray-500 ${
-                    mobileFilterRoleOpen ? "rotate-90" : ""
-                  }`}
-                />
-              </button>
-              {mobileFilterRoleOpen && (
-                <>
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setMobileFilterRoleOpen(false)}
-                  />
-                  <div className="absolute top-full left-0 mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-1.5 z-[9999] min-w-[110px] w-56">
-                    {["All Roles", ...roles].map((r) => (
-                      <button
-                        key={r}
-                        onClick={() => {
-                          setRoleFilter(r === "All Roles" ? "All" : r);
-                          setMobileFilterRoleOpen(false);
-                        }}
-                        className={`w-full text-left px-3 py-2 text-xs font-medium transition-colors flex items-center gap-2 ${
-                          (roleFilter === "All" && r === "All Roles") ||
-                          roleFilter === r
-                            ? "bg-indigo-600 text-white"
-                            : "text-gray-700 hover:bg-gray-100"
-                        }`}
-                      >
-                        {r}
-                        {roleFilter === r && (
-                          <CheckCircle size={12} className="ml-auto" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </>
               )}
-            </div>
 
-            {/* Language Filter - Custom Dropdown */}
-            <div className="relative flex-1">
-              <button
-                onClick={() => setMobileFilterLangOpen(!mobileFilterLangOpen)}
-                className="w-full flex items-center justify-between gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs font-medium text-gray-700 shadow-sm hover:shadow-md hover:border-gray-400 transition-all"
-              >
-                <span className="truncate">
-                  {langFilter.length === 0
-                    ? "All Languages"
-                    : langFilter.join(", ")}
-                </span>
-                <ChevronRight
-                  size={12}
-                  className={`flex-shrink-0 transition-transform text-gray-500 ${
-                    mobileFilterLangOpen ? "rotate-90" : ""
-                  }`}
-                />
-              </button>
-              {mobileFilterLangOpen && (
-                <>
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setMobileFilterLangOpen(false)}
-                  />
-                  <div className="absolute top-full left-0 mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-1.5 z-[9999] min-w-[110px] w-56">
-                    {ALL_LANGUAGES.map((l) => (
-                      <label
-                        key={l}
-                        className="w-full text-left px-3 py-2 text-xs font-medium transition-colors flex items-center gap-2 cursor-pointer hover:bg-gray-100"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={langFilter.includes(l)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setLangFilter([...langFilter, l]);
-                            } else {
-                              setLangFilter(
-                                langFilter.filter((lang) => lang !== l),
-                              );
-                            }
-                          }}
-                          className="rounded w-4 h-4"
-                        />
-                        {l}
-                      </label>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1">
-            {/* Shift Filter - Custom Dropdown */}
-            <div className="relative flex-1">
-              <button
-                onClick={() => setMobileFilterShiftOpen(!mobileFilterShiftOpen)}
-                className="w-full flex items-center justify-between gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs font-medium text-gray-700 shadow-sm hover:shadow-md hover:border-gray-400 transition-all"
-              >
-                <span className="truncate">
-                  {shiftFilter === "All"
-                    ? "All Shifts"
-                    : shiftFilter === "M"
-                      ? "Morning"
-                      : shiftFilter === "T"
-                        ? "Afternoon"
-                        : "Night"}
-                </span>
-                <ChevronRight
-                  size={12}
-                  className={`flex-shrink-0 transition-transform text-gray-500 ${
-                    mobileFilterShiftOpen ? "rotate-90" : ""
-                  }`}
-                />
-              </button>
-              {mobileFilterShiftOpen && (
-                <>
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setMobileFilterShiftOpen(false)}
-                  />
-                  <div className="absolute top-full left-0 mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-1.5 z-[9999] min-w-[130px] w-56">
-                    {[
-                      { val: "All", label: "All Shifts" },
-                      { val: "M", label: "Morning (M)" },
-                      { val: "T", label: "Afternoon (T)" },
-                      { val: "N", label: "Night (N)" },
-                    ].map((s) => (
-                      <button
-                        key={s.val}
-                        onClick={() => {
-                          setShiftFilter(s.val);
-                          setMobileFilterShiftOpen(false);
-                        }}
-                        className={`w-full text-left px-3 py-2 text-xs font-medium transition-colors flex items-center gap-2 ${
-                          shiftFilter === s.val
-                            ? "bg-indigo-600 text-white"
-                            : "text-gray-700 hover:bg-gray-100"
-                        }`}
-                      >
-                        {s.label}
-                        {shiftFilter === s.val && (
-                          <CheckCircle size={12} className="ml-auto" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Sort Filter - Custom Dropdown */}
-            <div className="relative flex-1">
-              <button
-                onClick={() => setMobileFilterSortOpen(!mobileFilterSortOpen)}
-                className="w-full flex items-center justify-between gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs font-medium text-gray-700 shadow-sm hover:shadow-md hover:border-gray-400 transition-all"
-              >
-                <span className="truncate">
-                  {sortOrder === "AZ"
-                    ? t.sortAZ
-                    : sortOrder === "ZA"
-                      ? t.sortZA
-                      : t.sortRole}
-                </span>
-                <ChevronRight
-                  size={12}
-                  className={`flex-shrink-0 transition-transform text-gray-500 ${
-                    mobileFilterSortOpen ? "rotate-90" : ""
-                  }`}
-                />
-              </button>
-              {mobileFilterSortOpen && (
-                <>
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setMobileFilterSortOpen(false)}
-                  />
-                  <div className="absolute top-full left-0 mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-1.5 z-50 min-w-[130px]">
-                    {[
-                      { val: "AZ", label: t.sortAZ },
-                      { val: "ZA", label: t.sortZA },
-                      { val: "ROLE", label: t.sortRole },
-                    ].map((s) => (
-                      <button
-                        key={s.val}
-                        onClick={() => {
-                          setSortOrder(s.val);
-                          setMobileFilterSortOpen(false);
-                        }}
-                        className={`w-full text-left px-3 py-2 text-xs font-medium transition-colors flex items-center gap-2 ${
-                          sortOrder === s.val
-                            ? "bg-indigo-600 text-white"
-                            : "text-gray-700 hover:bg-gray-100"
-                        }`}
-                      >
-                        {s.label}
-                        {sortOrder === s.val && (
-                          <CheckCircle size={12} className="ml-auto" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center bg-white border rounded-lg shadow-sm">
-              <button
-                onClick={handlePrevMonth}
-                className="p-1.5 hover:bg-gray-100 rounded-l-lg"
-              >
-                <ChevronLeft size={16} />
-              </button>
-              <div className="px-4 font-semibold text-xs flex items-center justify-center gap-2">
-                <Calendar size={14} />
-                {monthLabel}
-              </div>
-              <button
-                onClick={handleNextMonth}
-                className="p-1.5 hover:bg-gray-100 rounded-r-lg"
-              >
-                <ChevronRight size={16} />
-              </button>
-            </div>
-            {selectedDates.length > 0 && (
-              <button
-                onClick={() => setSelectedDates([])}
-                style={{
-                  background: "#92400e",
-                  color: "white",
-                  border: "1px solid #78350f",
-                  borderRadius: "0.375rem",
-                  padding: "0.375rem 0.75rem",
-                  fontSize: "0.75rem",
-                  fontWeight: "normal",
-                  boxShadow: "0 1px 2px rgba(0, 0, 0, 0.05)",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.25rem",
-                  cursor: "pointer",
-                  transition: "box-shadow 150ms ease-in-out",
-                }}
-              >
-                <X size={11} />
-                Clear ({selectedDates.length})
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Desktop Filters - Original Layout */}
-        <div className="hidden md:flex px-2 sm:px-3 md:px-4 py-0.5 bg-gray-50 border-t flex-col md:flex-row justify-between items-start md:items-center gap-0.5 md:gap-0 overflow-x-auto overflow-y-visible relative">
-          <div className="flex items-center gap-2 md:gap-4 flex-wrap text-[10px] md:text-xs">
-            <div className="flex items-center gap-1 md:gap-2 hidden sm:flex">
-              <Filter size={12} className="md:w-4 md:h-4" />
-              <span className="font-bold hidden md:inline">{t.filters}:</span>
-            </div>
-            {/* Role radio group */}
-            <div className="flex items-center gap-2">
-              <div className="text-xs font-semibold text-gray-600 mr-2">
-                {t.all}:
-              </div>
-              <div className="flex items-center gap-2">
-                <label
-                  className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border ${
-                    roleFilter === "All"
-                      ? "bg-indigo-600 text-white border-indigo-600"
-                      : "bg-white text-gray-700"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="roleFilter"
-                    value="All"
-                    checked={roleFilter === "All"}
-                    onChange={() => setRoleFilter("All")}
-                    className="sr-only"
-                  />
-                  All
-                </label>
-                {roles.map((r) => (
-                  <label
-                    key={r}
-                    className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border ${
-                      roleFilter === r
-                        ? "bg-indigo-600 text-white border-indigo-600"
-                        : "bg-white text-gray-700"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="roleFilter"
-                      value={r}
-                      checked={roleFilter === r}
-                      onChange={() => setRoleFilter(r)}
-                      className="sr-only"
-                    />
-                    {r}
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {/* Language radio group */}
-            <div className="flex items-center gap-2">
-              <div className="text-xs font-semibold text-gray-600 mr-2">
-                {t.linguas}:
-              </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                {ALL_LANGUAGES.map((l) => (
-                  <label
-                    key={l}
-                    className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border cursor-pointer ${
-                      langFilter.includes(l)
-                        ? "bg-indigo-600 text-white border-indigo-600"
-                        : "bg-white text-gray-700"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={langFilter.includes(l)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setLangFilter([...langFilter, l]);
-                        } else {
-                          setLangFilter(
-                            langFilter.filter((lang) => lang !== l),
-                          );
-                        }
-                      }}
-                      className="sr-only"
-                    />
-                    {l}
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {/* Shift radio group */}
-            <div className="flex items-center gap-2">
-              <div className="text-xs font-semibold text-gray-600 mr-2">
-                Shifts:
-              </div>
-              <label
-                className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border ${
-                  shiftFilter === "All"
-                    ? "bg-indigo-600 text-white border-indigo-600"
-                    : "bg-white text-gray-700"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="shiftFilter"
-                  value="All"
-                  checked={shiftFilter === "All"}
-                  onChange={() => setShiftFilter("All")}
-                  className="sr-only"
-                />
-                {t.all}
-              </label>
-              <label
-                className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border ${
-                  shiftFilter === "M"
-                    ? "bg-indigo-600 text-white border-indigo-600"
-                    : "bg-white text-gray-700"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="shiftFilter"
-                  value="M"
-                  checked={shiftFilter === "M"}
-                  onChange={() => setShiftFilter("M")}
-                  className="sr-only"
-                />
-                M
-              </label>
-              <label
-                className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border ${
-                  shiftFilter === "T"
-                    ? "bg-indigo-600 text-white border-indigo-600"
-                    : "bg-white text-gray-700"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="shiftFilter"
-                  value="T"
-                  checked={shiftFilter === "T"}
-                  onChange={() => setShiftFilter("T")}
-                  className="sr-only"
-                />
-                T
-              </label>
-              <label
-                className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border ${
-                  shiftFilter === "N"
-                    ? "bg-indigo-600 text-white border-indigo-600"
-                    : "bg-white text-gray-700"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="shiftFilter"
-                  value="N"
-                  checked={shiftFilter === "N"}
-                  onChange={() => setShiftFilter("N")}
-                  className="sr-only"
-                />
-                N
-              </label>
-            </div>
-
-            <div className="flex items-center gap-2 ml-4 border-l pl-4">
-              <div className="text-xs font-semibold text-gray-600 mr-2">
-                {t.sort}:
-              </div>
-              <div className="relative">
-                <button
-                  onClick={(e) => {
-                    const rect = (
-                      e.currentTarget as HTMLElement
-                    ).getBoundingClientRect();
-                    setSortButtonPos({ top: rect.bottom + 2, left: rect.left });
-                    setDesktopFilterSortOpen(!desktopFilterSortOpen);
-                  }}
-                  className="flex items-center justify-between gap-2 bg-white border border-gray-300 rounded px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-all min-w-[120px]"
-                >
-                  <span>
-                    {sortOrder === "AZ"
-                      ? t.sortAZ
-                      : sortOrder === "ZA"
-                        ? t.sortZA
-                        : t.sortRole}
-                  </span>
-                  <ChevronRight
-                    size={12}
-                    className={`transition-transform text-gray-500 ${
-                      desktopFilterSortOpen ? "rotate-90" : ""
-                    }`}
-                  />
-                </button>
-                {desktopFilterSortOpen && sortButtonPos && (
+              {/* SUBMIT FOR APPROVAL BUTTON (Visible for editors with pending selections) */}
+              {currentUser.role === "editor" &&
+                canWrite &&
+                Object.keys(pendingSelections).length > 0 && (
                   <>
-                    <div
-                      className="fixed inset-0 z-[100]"
-                      onClick={() => setDesktopFilterSortOpen(false)}
-                    />
-                    <div
-                      className="fixed bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-[101] min-w-[140px]"
-                      style={{
-                        top: `${sortButtonPos.top}px`,
-                        left: `${sortButtonPos.left}px`,
-                      }}
+                    <button
+                      onClick={handleSubmitPendingRequests}
+                      className="flex items-center px-2 sm:px-3 py-1.5 sm:py-2 bg-green-50 text-green-700 rounded hover:bg-green-100 transition border border-green-200 text-xs sm:text-sm relative"
+                      title={t.submitForApproval}
                     >
-                      {[
-                        { val: "AZ", label: t.sortAZ },
-                        { val: "ZA", label: t.sortZA },
-                        { val: "ROLE", label: t.sortRole },
-                      ].map((s) => (
-                        <button
-                          key={s.val}
-                          onClick={() => {
-                            setSortOrder(s.val);
-                            setDesktopFilterSortOpen(false);
-                          }}
-                          className={`w-full text-left px-3 py-2 text-xs font-medium transition-colors flex items-center gap-2 ${
-                            sortOrder === s.val
-                              ? "bg-indigo-600 text-white"
-                              : "text-gray-700 hover:bg-gray-100"
-                          }`}
-                        >
-                          {s.label}
-                          {sortOrder === s.val && (
-                            <CheckCircle size={12} className="ml-auto" />
-                          )}
-                        </button>
-                      ))}
-                    </div>
+                      <CheckCircle
+                        size={14}
+                        className="sm:w-4 sm:h-4 mr-1 sm:mr-2"
+                      />
+                      <span className="hidden sm:inline">
+                        {t.submitForApproval}
+                      </span>
+                      <span className="sm:hidden">Submit</span>
+                      <span className="ml-1 sm:ml-2 bg-green-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold">
+                        {Object.keys(pendingSelections).length}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => setPendingSelections({})}
+                      className="flex items-center px-2 sm:px-3 py-1.5 sm:py-2 bg-red-50 text-red-700 rounded hover:bg-red-100 transition border border-red-200 text-xs sm:text-sm"
+                      title={t.clearPendingSelections}
+                    >
+                      <X size={14} className="sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+                      <span className="hidden sm:inline">
+                        {t.clearPendingSelections}
+                      </span>
+                      <span className="sm:hidden">Clear</span>
+                    </button>
                   </>
                 )}
-              </div>
-            </div>
-          </div>
 
-          <div className="flex items-center bg-white border rounded-lg shadow-sm">
-            <button
-              onClick={handlePrevMonth}
-              className="p-1.5 hover:bg-gray-100 rounded-l-lg"
-            >
-              <ChevronLeft size={16} />
-            </button>
-            <div className="px-4 font-semibold w-32 text-center text-xs flex items-center justify-center gap-2">
-              <Calendar size={14} />
-              {monthLabel}
-            </div>
-            <button
-              onClick={handleNextMonth}
-              className="p-1.5 hover:bg-gray-100 rounded-r-lg"
-            >
-              <ChevronRight size={16} />
-            </button>
-          </div>
+              {/* BULK ACTIONS BUTTON (Visible if can write) */}
+              {canBulkActions && (
+                <button
+                  onClick={() => {
+                    setPreSelectedBulkId(
+                      currentUser.role === "editor"
+                        ? String(loggedInUserId)
+                        : "",
+                    );
+                    setShowBulkModal(true);
+                  }}
+                  className="flex items-center px-2 sm:px-3 py-1.5 sm:py-2 bg-purple-50 text-purple-700 rounded hover:bg-purple-100 transition border border-purple-200 text-xs sm:text-sm"
+                  title={t.bulkTitle}
+                >
+                  <Layers size={14} className="sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+                  <span className="hidden sm:inline">{t.bulkActions}</span>
+                  <span className="sm:hidden">Bulk</span>
+                </button>
+              )}
 
-          {/* Multi-day selection indicator */}
-          {selectedDates.length > 0 && (
-            <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg shadow-sm px-3 py-1">
-              <span className="text-xs font-semibold text-blue-800">
-                {t.selectedDays}: {selectedDates.length}
-              </span>
-              <button
-                onClick={() => setSelectedDates([])}
-                className="text-xs text-blue-600 hover:text-blue-800 underline"
-              >
-                {t.clearSelection}
-              </button>
-            </div>
-          )}
+              {canBackupTools && (
+                <div className="flex items-center bg-gray-100 rounded p-1 mr-2">
+                  <button
+                    onClick={handleSaveFile}
+                    className="p-2 hover:bg-white rounded text-gray-600"
+                    title={t.saveFile}
+                  >
+                    <FileJson size={16} />
+                  </button>
+                  <label
+                    className="p-2 hover:bg-white rounded text-gray-600 cursor-pointer"
+                    title={t.loadFile}
+                  >
+                    <Upload size={16} />
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleLoadFile}
+                      className="hidden"
+                      accept=".json"
+                    />
+                  </label>
+                </div>
+              )}
 
-          {/* Go to Date picker */}
-          <div className="flex items-center gap-2 bg-white border rounded-lg shadow-sm px-3 py-1">
-            <span className="text-xs font-semibold text-gray-600">Focus:</span>
-            <input
-              type="date"
-              value={focusedDate || ""}
-              onChange={(e) => {
-                const val = e.target.value;
-                setFocusedDate(val || null);
-                if (val) {
-                  const [y, m, d] = val.split("-").map(Number);
-                  const targetDate = new Date(y, m - 1, d);
-                  if (
-                    targetDate.getFullYear() !== currentDate.getFullYear() ||
-                    targetDate.getMonth() !== currentDate.getMonth()
-                  ) {
-                    setCurrentDate(new Date(y, m - 1, 1));
-                    setVisibleMonthDate(new Date(y, m - 1, 1));
-                    hasAppendedRef.current = false;
-                    setNextMonthExtraDays(0);
-                  }
-                  // Scroll to the focused day
-                  setTimeout(() => {
-                    const el = calendarRef.current;
-                    if (el) {
-                      const ths = el.querySelectorAll("table thead th");
-                      const dayThs = Array.from(ths).slice(1) as HTMLElement[];
-                      const targetDay = targetDate.getDate();
-                      const targetTh = dayThs[targetDay - 1];
-                      if (targetTh) {
-                        const stickyWidth =
-                          (ths[0] as HTMLElement)?.offsetWidth || 0;
-                        el.scrollLeft = targetTh.offsetLeft - stickyWidth - 50;
-                      }
+              {canViewAnnual && (
+                <button
+                  onClick={() => setShowAnnual(true)}
+                  className="hidden md:flex items-center px-3 py-2 bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition border border-blue-200"
+                >
+                  <Calendar size={16} className="mr-2" /> {t.annual}
+                </button>
+              )}
+              {canViewStats && (
+                <button
+                  onClick={() => setShowStats(true)}
+                  className="hidden md:flex items-center px-3 py-2 bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100 transition border border-indigo-200"
+                >
+                  <BarChart3 size={16} className="mr-2" /> {t.stats}
+                </button>
+              )}
+
+              {canExportCsv && (
+                <button
+                  onClick={handleExportCSV}
+                  className="hidden md:flex items-center px-3 py-2 bg-green-50 text-green-700 rounded hover:bg-green-100 transition border border-green-200"
+                >
+                  <Download size={16} className="mr-2" /> {t.exportCsv}
+                </button>
+              )}
+
+              {canPublish && (
+                <div className="flex flex-col gap-0.5">
+                  <button
+                    onClick={handlePublish}
+                    disabled={!hasUnpublishedChanges || isLoading}
+                    className={`flex items-center px-3 py-2 rounded transition border ${
+                      hasUnpublishedChanges && !isLoading
+                        ? "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 cursor-pointer"
+                        : "bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed"
+                    }`}
+                    title={
+                      isLoading
+                        ? "Loading schedule data..."
+                        : hasUnpublishedChanges
+                          ? "Publish schedule to viewers"
+                          : "No unpublished changes"
                     }
-                  }, 100);
-                }
-              }}
-              className="text-xs border rounded px-2 py-1"
-            />
-            {focusedDate && (
-              <button
-                onClick={() => setFocusedDate(null)}
-                style={{
-                  background:
-                    "linear-gradient(to bottom right, #ef4444, #dc2626)",
-                  color: "white",
-                  border: "1px solid #f87171",
-                  borderRadius: "0.5rem",
-                  padding: "0.5rem 0.75rem",
-                  fontSize: "0.75rem",
-                  fontWeight: "500",
-                  boxShadow: "0 1px 2px rgba(0, 0, 0, 0.05)",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.25rem",
-                  cursor: "pointer",
-                  transition: "box-shadow 150ms ease-in-out",
-                }}
-                title="Clear focus"
-              >
-                <X size={12} />
-                Clear
-              </button>
-            )}
+                  >
+                    {isLoading && (
+                      <Loader2 size={16} className="mr-2 animate-spin" />
+                    )}
+                    {!isLoading && <Upload size={16} className="mr-2" />}
+                    {isLoading ? "Loading..." : "Publish"}{" "}
+                    {hasUnpublishedChanges && !isLoading && (
+                      <span className="ml-1 font-bold">*</span>
+                    )}
+                  </button>
+                  {lastPublished && (
+                    <div className="text-[9px] text-gray-500 px-1 text-center">
+                      Last: {new Date(lastPublished).toLocaleString()}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Undo/Redo Buttons */}
+              {canManage && canWrite && (
+                <>
+                  <button
+                    onClick={handleUndo}
+                    disabled={undoHistory.length === 0}
+                    className="flex items-center px-3 py-2 bg-gray-50 text-gray-700 rounded hover:bg-gray-100 transition border border-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                    title={t.undo}
+                  >
+                    <Undo size={16} className="mr-2" />
+                    {t.undo}
+                  </button>
+                  <button
+                    onClick={handleRedo}
+                    disabled={redoHistory.length === 0}
+                    className="flex items-center px-3 py-2 bg-gray-50 text-gray-700 rounded hover:bg-gray-100 transition border border-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                    title={t.redo}
+                  >
+                    <Redo size={16} className="mr-2" />
+                    {t.redo}
+                  </button>
+                </>
+              )}
+
+              {canAccessSettings && (
+                <button
+                  onClick={() => setShowConfig(!showConfig)}
+                  className={`hidden md:flex items-center px-3 py-2 rounded transition ${
+                    showConfig
+                      ? "bg-indigo-100 text-indigo-800"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                >
+                  <Settings size={16} className="mr-2" /> {t.config}
+                </button>
+              )}
+
+              {currentUser.permissions.includes("system") ? (
+                <button
+                  onClick={() => setShowAdmin(!showAdmin)}
+                  className={`flex items-center px-3 py-2 rounded transition ${
+                    showAdmin
+                      ? "bg-red-100 text-red-800"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                >
+                  <Shield size={16} className="mr-2" /> Admin
+                </button>
+              ) : null}
+            </div>
           </div>
+
+          {/* Viewer notice when showing draft (unpublished) schedule */}
+          {showCalendarView &&
+            !canManage &&
+            Object.keys(publishedOverrides).length === 0 && (
+              <div className="px-2 sm:px-3 md:px-4 py-1 bg-amber-50 text-amber-800 border-t border-b border-amber-200 text-xs">
+                No published schedule yet. Please contact a manager to publish.
+              </div>
+            )}
+
+          {/* Bottom Row: Filters & Nav */}
+          {showCalendarView && (
+            <>
+              {/* Mobile Filters - Custom Dropdowns */}
+              <div className="md:hidden px-2 py-2 bg-gray-50 border-t flex flex-col gap-2 relative z-50 filter-container">
+                <div className="flex items-center gap-1">
+                  {/* Role Filter - Custom Dropdown */}
+                  <div className="relative flex-1">
+                    <button
+                      onClick={() =>
+                        setMobileFilterRoleOpen(!mobileFilterRoleOpen)
+                      }
+                      className="w-full flex items-center justify-between gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs font-medium text-gray-700 shadow-sm hover:shadow-md hover:border-gray-400 transition-all"
+                    >
+                      <span className="truncate">
+                        {roleFilter === "All" ? "All Roles" : roleFilter}
+                      </span>
+                      <ChevronRight
+                        size={12}
+                        className={`flex-shrink-0 transition-transform text-gray-500 ${
+                          mobileFilterRoleOpen ? "rotate-90" : ""
+                        }`}
+                      />
+                    </button>
+                    {mobileFilterRoleOpen && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setMobileFilterRoleOpen(false)}
+                        />
+                        <div className="absolute top-full left-0 mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-1.5 z-[9999] min-w-[110px] w-56">
+                          {["All Roles", ...roles].map((r) => (
+                            <button
+                              key={r}
+                              onClick={() => {
+                                setRoleFilter(r === "All Roles" ? "All" : r);
+                                setMobileFilterRoleOpen(false);
+                              }}
+                              className={`w-full text-left px-3 py-2 text-xs font-medium transition-colors flex items-center gap-2 ${
+                                (roleFilter === "All" && r === "All Roles") ||
+                                roleFilter === r
+                                  ? "bg-indigo-600 text-white"
+                                  : "text-gray-700 hover:bg-gray-100"
+                              }`}
+                            >
+                              {r}
+                              {roleFilter === r && (
+                                <CheckCircle size={12} className="ml-auto" />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Language Filter - Custom Dropdown */}
+                  <div className="relative flex-1">
+                    <button
+                      onClick={() =>
+                        setMobileFilterLangOpen(!mobileFilterLangOpen)
+                      }
+                      className="w-full flex items-center justify-between gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs font-medium text-gray-700 shadow-sm hover:shadow-md hover:border-gray-400 transition-all"
+                    >
+                      <span className="truncate">
+                        {langFilter.length === 0
+                          ? "All Languages"
+                          : langFilter.join(", ")}
+                      </span>
+                      <ChevronRight
+                        size={12}
+                        className={`flex-shrink-0 transition-transform text-gray-500 ${
+                          mobileFilterLangOpen ? "rotate-90" : ""
+                        }`}
+                      />
+                    </button>
+                    {mobileFilterLangOpen && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setMobileFilterLangOpen(false)}
+                        />
+                        <div className="absolute top-full left-0 mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-1.5 z-[9999] min-w-[110px] w-56">
+                          {ALL_LANGUAGES.map((l) => (
+                            <label
+                              key={l}
+                              className="w-full text-left px-3 py-2 text-xs font-medium transition-colors flex items-center gap-2 cursor-pointer hover:bg-gray-100"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={langFilter.includes(l)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setLangFilter([...langFilter, l]);
+                                  } else {
+                                    setLangFilter(
+                                      langFilter.filter((lang) => lang !== l),
+                                    );
+                                  }
+                                }}
+                                className="rounded w-4 h-4"
+                              />
+                              {l}
+                            </label>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  {/* Shift Filter - Custom Dropdown */}
+                  <div className="relative flex-1">
+                    <button
+                      onClick={() =>
+                        setMobileFilterShiftOpen(!mobileFilterShiftOpen)
+                      }
+                      className="w-full flex items-center justify-between gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs font-medium text-gray-700 shadow-sm hover:shadow-md hover:border-gray-400 transition-all"
+                    >
+                      <span className="truncate">
+                        {shiftFilter === "All"
+                          ? "All Shifts"
+                          : shiftFilter === "M"
+                            ? "Morning"
+                            : shiftFilter === "T"
+                              ? "Afternoon"
+                              : "Night"}
+                      </span>
+                      <ChevronRight
+                        size={12}
+                        className={`flex-shrink-0 transition-transform text-gray-500 ${
+                          mobileFilterShiftOpen ? "rotate-90" : ""
+                        }`}
+                      />
+                    </button>
+                    {mobileFilterShiftOpen && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setMobileFilterShiftOpen(false)}
+                        />
+                        <div className="absolute top-full left-0 mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-1.5 z-[9999] min-w-[130px] w-56">
+                          {[
+                            { val: "All", label: "All Shifts" },
+                            { val: "M", label: "Morning (M)" },
+                            { val: "T", label: "Afternoon (T)" },
+                            { val: "N", label: "Night (N)" },
+                          ].map((s) => (
+                            <button
+                              key={s.val}
+                              onClick={() => {
+                                setShiftFilter(s.val);
+                                setMobileFilterShiftOpen(false);
+                              }}
+                              className={`w-full text-left px-3 py-2 text-xs font-medium transition-colors flex items-center gap-2 ${
+                                shiftFilter === s.val
+                                  ? "bg-indigo-600 text-white"
+                                  : "text-gray-700 hover:bg-gray-100"
+                              }`}
+                            >
+                              {s.label}
+                              {shiftFilter === s.val && (
+                                <CheckCircle size={12} className="ml-auto" />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Sort Filter - Custom Dropdown */}
+                  <div className="relative flex-1">
+                    <button
+                      onClick={() =>
+                        setMobileFilterSortOpen(!mobileFilterSortOpen)
+                      }
+                      className="w-full flex items-center justify-between gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs font-medium text-gray-700 shadow-sm hover:shadow-md hover:border-gray-400 transition-all"
+                    >
+                      <span className="truncate">
+                        {sortOrder === "AZ"
+                          ? t.sortAZ
+                          : sortOrder === "ZA"
+                            ? t.sortZA
+                            : t.sortRole}
+                      </span>
+                      <ChevronRight
+                        size={12}
+                        className={`flex-shrink-0 transition-transform text-gray-500 ${
+                          mobileFilterSortOpen ? "rotate-90" : ""
+                        }`}
+                      />
+                    </button>
+                    {mobileFilterSortOpen && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setMobileFilterSortOpen(false)}
+                        />
+                        <div className="absolute top-full left-0 mt-2 bg-white rounded-lg shadow-xl border border-gray-200 py-1.5 z-50 min-w-[130px]">
+                          {[
+                            { val: "AZ", label: t.sortAZ },
+                            { val: "ZA", label: t.sortZA },
+                            { val: "ROLE", label: t.sortRole },
+                          ].map((s) => (
+                            <button
+                              key={s.val}
+                              onClick={() => {
+                                setSortOrder(s.val);
+                                setMobileFilterSortOpen(false);
+                              }}
+                              className={`w-full text-left px-3 py-2 text-xs font-medium transition-colors flex items-center gap-2 ${
+                                sortOrder === s.val
+                                  ? "bg-indigo-600 text-white"
+                                  : "text-gray-700 hover:bg-gray-100"
+                              }`}
+                            >
+                              {s.label}
+                              {sortOrder === s.val && (
+                                <CheckCircle size={12} className="ml-auto" />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center bg-white border rounded-lg shadow-sm">
+                    <button
+                      onClick={handlePrevMonth}
+                      className="p-1.5 hover:bg-gray-100 rounded-l-lg"
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
+                    <div className="px-4 font-semibold text-xs flex items-center justify-center gap-2">
+                      <Calendar size={14} />
+                      {monthLabel}
+                    </div>
+                    <button
+                      onClick={handleNextMonth}
+                      className="p-1.5 hover:bg-gray-100 rounded-r-lg"
+                    >
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
+                  {selectedDates.length > 0 && (
+                    <button
+                      onClick={() => setSelectedDates([])}
+                      style={{
+                        background: "#92400e",
+                        color: "white",
+                        border: "1px solid #78350f",
+                        borderRadius: "0.375rem",
+                        padding: "0.375rem 0.75rem",
+                        fontSize: "0.75rem",
+                        fontWeight: "normal",
+                        boxShadow: "0 1px 2px rgba(0, 0, 0, 0.05)",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.25rem",
+                        cursor: "pointer",
+                        transition: "box-shadow 150ms ease-in-out",
+                      }}
+                    >
+                      <X size={11} />
+                      Clear ({selectedDates.length})
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Desktop Filters - Original Layout */}
+              <div className="hidden md:flex px-2 sm:px-3 md:px-4 py-0.5 bg-gray-50 border-t flex-col md:flex-row justify-between items-start md:items-center gap-0.5 md:gap-0 overflow-x-auto overflow-y-visible relative">
+                <div className="flex items-center gap-2 md:gap-4 flex-wrap text-[10px] md:text-xs">
+                  <div className="flex items-center gap-1 md:gap-2 hidden sm:flex">
+                    <Filter size={12} className="md:w-4 md:h-4" />
+                    <span className="font-bold hidden md:inline">
+                      {t.filters}:
+                    </span>
+                  </div>
+                  {/* Role radio group */}
+                  <div className="flex items-center gap-2">
+                    <div className="text-xs font-semibold text-gray-600 mr-2">
+                      {t.all}:
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label
+                        className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border ${
+                          roleFilter === "All"
+                            ? "bg-indigo-600 text-white border-indigo-600"
+                            : "bg-white text-gray-700"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="roleFilter"
+                          value="All"
+                          checked={roleFilter === "All"}
+                          onChange={() => setRoleFilter("All")}
+                          className="sr-only"
+                        />
+                        All
+                      </label>
+                      {roles.map((r) => (
+                        <label
+                          key={r}
+                          className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border ${
+                            roleFilter === r
+                              ? "bg-indigo-600 text-white border-indigo-600"
+                              : "bg-white text-gray-700"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="roleFilter"
+                            value={r}
+                            checked={roleFilter === r}
+                            onChange={() => setRoleFilter(r)}
+                            className="sr-only"
+                          />
+                          {r}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Language radio group */}
+                  <div className="flex items-center gap-2">
+                    <div className="text-xs font-semibold text-gray-600 mr-2">
+                      {t.linguas}:
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {ALL_LANGUAGES.map((l) => (
+                        <label
+                          key={l}
+                          className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border cursor-pointer ${
+                            langFilter.includes(l)
+                              ? "bg-indigo-600 text-white border-indigo-600"
+                              : "bg-white text-gray-700"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={langFilter.includes(l)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setLangFilter([...langFilter, l]);
+                              } else {
+                                setLangFilter(
+                                  langFilter.filter((lang) => lang !== l),
+                                );
+                              }
+                            }}
+                            className="sr-only"
+                          />
+                          {l}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Shift radio group */}
+                  <div className="flex items-center gap-2">
+                    <div className="text-xs font-semibold text-gray-600 mr-2">
+                      Shifts:
+                    </div>
+                    <label
+                      className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border ${
+                        shiftFilter === "All"
+                          ? "bg-indigo-600 text-white border-indigo-600"
+                          : "bg-white text-gray-700"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="shiftFilter"
+                        value="All"
+                        checked={shiftFilter === "All"}
+                        onChange={() => setShiftFilter("All")}
+                        className="sr-only"
+                      />
+                      {t.all}
+                    </label>
+                    <label
+                      className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border ${
+                        shiftFilter === "M"
+                          ? "bg-indigo-600 text-white border-indigo-600"
+                          : "bg-white text-gray-700"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="shiftFilter"
+                        value="M"
+                        checked={shiftFilter === "M"}
+                        onChange={() => setShiftFilter("M")}
+                        className="sr-only"
+                      />
+                      M
+                    </label>
+                    <label
+                      className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border ${
+                        shiftFilter === "T"
+                          ? "bg-indigo-600 text-white border-indigo-600"
+                          : "bg-white text-gray-700"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="shiftFilter"
+                        value="T"
+                        checked={shiftFilter === "T"}
+                        onChange={() => setShiftFilter("T")}
+                        className="sr-only"
+                      />
+                      T
+                    </label>
+                    <label
+                      className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border ${
+                        shiftFilter === "N"
+                          ? "bg-indigo-600 text-white border-indigo-600"
+                          : "bg-white text-gray-700"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="shiftFilter"
+                        value="N"
+                        checked={shiftFilter === "N"}
+                        onChange={() => setShiftFilter("N")}
+                        className="sr-only"
+                      />
+                      N
+                    </label>
+                  </div>
+
+                  <div className="flex items-center gap-2 ml-4 border-l pl-4">
+                    <div className="text-xs font-semibold text-gray-600 mr-2">
+                      {t.sort}:
+                    </div>
+                    <div className="relative">
+                      <button
+                        onClick={(e) => {
+                          const rect = (
+                            e.currentTarget as HTMLElement
+                          ).getBoundingClientRect();
+                          setSortButtonPos({
+                            top: rect.bottom + 2,
+                            left: rect.left,
+                          });
+                          setDesktopFilterSortOpen(!desktopFilterSortOpen);
+                        }}
+                        className="flex items-center justify-between gap-2 bg-white border border-gray-300 rounded px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-all min-w-[120px]"
+                      >
+                        <span>
+                          {sortOrder === "AZ"
+                            ? t.sortAZ
+                            : sortOrder === "ZA"
+                              ? t.sortZA
+                              : t.sortRole}
+                        </span>
+                        <ChevronRight
+                          size={12}
+                          className={`transition-transform text-gray-500 ${
+                            desktopFilterSortOpen ? "rotate-90" : ""
+                          }`}
+                        />
+                      </button>
+                      {desktopFilterSortOpen && sortButtonPos && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-[100]"
+                            onClick={() => setDesktopFilterSortOpen(false)}
+                          />
+                          <div
+                            className="fixed bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-[101] min-w-[140px]"
+                            style={{
+                              top: `${sortButtonPos.top}px`,
+                              left: `${sortButtonPos.left}px`,
+                            }}
+                          >
+                            {[
+                              { val: "AZ", label: t.sortAZ },
+                              { val: "ZA", label: t.sortZA },
+                              { val: "ROLE", label: t.sortRole },
+                            ].map((s) => (
+                              <button
+                                key={s.val}
+                                onClick={() => {
+                                  setSortOrder(s.val);
+                                  setDesktopFilterSortOpen(false);
+                                }}
+                                className={`w-full text-left px-3 py-2 text-xs font-medium transition-colors flex items-center gap-2 ${
+                                  sortOrder === s.val
+                                    ? "bg-indigo-600 text-white"
+                                    : "text-gray-700 hover:bg-gray-100"
+                                }`}
+                              >
+                                {s.label}
+                                {sortOrder === s.val && (
+                                  <CheckCircle size={12} className="ml-auto" />
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center bg-white border rounded-lg shadow-sm">
+                  <button
+                    onClick={handlePrevMonth}
+                    className="p-1.5 hover:bg-gray-100 rounded-l-lg"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <div className="px-4 font-semibold w-32 text-center text-xs flex items-center justify-center gap-2">
+                    <Calendar size={14} />
+                    {monthLabel}
+                  </div>
+                  <button
+                    onClick={handleNextMonth}
+                    className="p-1.5 hover:bg-gray-100 rounded-r-lg"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+
+                {/* Multi-day selection indicator */}
+                {selectedDates.length > 0 && (
+                  <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg shadow-sm px-3 py-1">
+                    <span className="text-xs font-semibold text-blue-800">
+                      {t.selectedDays}: {selectedDates.length}
+                    </span>
+                    <button
+                      onClick={() => setSelectedDates([])}
+                      className="text-xs text-blue-600 hover:text-blue-800 underline"
+                    >
+                      {t.clearSelection}
+                    </button>
+                  </div>
+                )}
+
+                {/* Go to Date picker */}
+                <div className="flex items-center gap-2 bg-white border rounded-lg shadow-sm px-3 py-1">
+                  <span className="text-xs font-semibold text-gray-600">
+                    Focus:
+                  </span>
+                  <input
+                    type="date"
+                    value={focusedDate || ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFocusedDate(val || null);
+                      if (val) {
+                        const [y, m, d] = val.split("-").map(Number);
+                        const targetDate = new Date(y, m - 1, d);
+                        if (
+                          targetDate.getFullYear() !==
+                            currentDate.getFullYear() ||
+                          targetDate.getMonth() !== currentDate.getMonth()
+                        ) {
+                          setCurrentDate(new Date(y, m - 1, 1));
+                          setVisibleMonthDate(new Date(y, m - 1, 1));
+                          hasAppendedRef.current = false;
+                          setNextMonthExtraDays(0);
+                        }
+                        // Scroll to the focused day
+                        setTimeout(() => {
+                          const el = calendarRef.current;
+                          if (el) {
+                            const ths = el.querySelectorAll("table thead th");
+                            const dayThs = Array.from(ths).slice(
+                              1,
+                            ) as HTMLElement[];
+                            const targetDay = targetDate.getDate();
+                            const targetTh = dayThs[targetDay - 1];
+                            if (targetTh) {
+                              const stickyWidth =
+                                (ths[0] as HTMLElement)?.offsetWidth || 0;
+                              el.scrollLeft =
+                                targetTh.offsetLeft - stickyWidth - 50;
+                            }
+                          }
+                        }, 100);
+                      }
+                    }}
+                    className="text-xs border rounded px-2 py-1"
+                  />
+                  {focusedDate && (
+                    <button
+                      onClick={() => setFocusedDate(null)}
+                      style={{
+                        background:
+                          "linear-gradient(to bottom right, #ef4444, #dc2626)",
+                        color: "white",
+                        border: "1px solid #f87171",
+                        borderRadius: "0.5rem",
+                        padding: "0.5rem 0.75rem",
+                        fontSize: "0.75rem",
+                        fontWeight: "500",
+                        boxShadow: "0 1px 2px rgba(0, 0, 0, 0.05)",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.25rem",
+                        cursor: "pointer",
+                        transition: "box-shadow 150ms ease-in-out",
+                      }}
+                      title="Clear focus"
+                    >
+                      <X size={12} />
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
         </div>
-      </div>
+      )}
 
       {/* Content */}
       <div className="flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden print:overflow-visible">
@@ -4213,284 +4279,131 @@ const ShiftScheduler = () => {
           ref={calendarRef}
           className="calendar-container flex-1 min-h-0 min-w-0 overflow-auto print:overflow-visible"
         >
-          <div className="hidden print:block mb-4">
-            <h1 className="text-2xl font-bold">
-              {t.printTitle} - {monthLabel}
-            </h1>
-            <p className="text-sm text-gray-500">
-              {t.generatedOn} {new Date().toLocaleDateString("en-GB")}
-            </p>
-          </div>
+          {showAdminDashboard ? (
+            <AdminDashboard
+              featureToggles={featureToggles}
+              onToggleFeature={handleToggleFeature}
+              onOpenAdminPanel={() => setShowAdmin(true)}
+              teamCount={teamState.length}
+            />
+          ) : showCalendarView ? (
+            <>
+              <div className="hidden print:block mb-4">
+                <h1 className="text-2xl font-bold">
+                  {t.printTitle} - {monthLabel}
+                </h1>
+                <p className="text-sm text-gray-500">
+                  {t.generatedOn} {new Date().toLocaleDateString("en-GB")}
+                </p>
+              </div>
 
-          <table className="w-full border-collapse text-base sm:text-sm print:text-[8px]">
-            <thead className="bg-gray-100 print:static">
-              <tr>
-                <th className="p-1 md:p-1.5 text-left border-b border-r min-w-[140px] md:min-w-[200px] bg-gray-100 sticky left-0 top-0 z-30 shadow-sm print:static print:bg-white print:border-black">
-                  <div className="flex items-center justify-between gap-1 md:gap-2 relative group">
-                    <div className="flex items-center gap-1 md:gap-2">
-                      {t.colaborador}
-                      {sortOrder === "AZ" && (
-                        <ArrowDownAZ
-                          size={14}
-                          className="text-indigo-600 ml-1 print:hidden"
-                        />
-                      )}
-                      {sortOrder === "ZA" && (
-                        <ArrowDownZA
-                          size={14}
-                          className="text-indigo-600 ml-1 print:hidden"
-                        />
-                      )}
-                      {sortOrder === "ROLE" && (
-                        <Briefcase
-                          size={14}
-                          className="text-indigo-600 ml-1 print:hidden"
-                        />
-                      )}
-                    </div>
-
-                    {/* Excel-style filter button */}
-                    <button
-                      onClick={() =>
-                        setMobileFilterEmpOpen(!mobileFilterEmpOpen)
-                      }
-                      className={`p-0.5 rounded transition-colors print:hidden ${
-                        empFilter.length > 0
-                          ? "bg-blue-500 text-white"
-                          : "text-gray-500 hover:text-gray-700 hover:bg-gray-200"
-                      }`}
-                      title="Filter employees"
-                    >
-                      <Filter size={14} />
-                    </button>
-
-                    {/* Excel-style filter dropdown */}
-                    {mobileFilterEmpOpen && (
-                      <>
-                        <div
-                          className="fixed inset-0 z-40"
-                          onClick={() => setMobileFilterEmpOpen(false)}
-                        />
-                        <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-2xl border border-gray-300 py-1 z-[9999] min-w-[220px] max-h-96 overflow-y-auto">
-                          {/* Select All / Clear All buttons */}
-                          <div className="border-b border-gray-200 px-3 py-2 flex gap-2">
-                            <button
-                              onClick={() =>
-                                setEmpFilter(teamState.map((e) => e.id))
-                              }
-                              className="flex-1 text-xs px-2 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded hover:bg-blue-100 font-medium"
-                            >
-                              All
-                            </button>
-                            <button
-                              onClick={() => setEmpFilter([])}
-                              className="flex-1 text-xs px-2 py-1 bg-gray-100 text-gray-700 border border-gray-300 rounded hover:bg-gray-200 font-medium"
-                            >
-                              Clear
-                            </button>
-                          </div>
-
-                          {/* Employee checkboxes */}
-                          <div className="p-1">
-                            {teamState
-                              .sort((a, b) => a.name.localeCompare(b.name))
-                              .map((emp) => (
-                                <label
-                                  key={emp.id}
-                                  className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-gray-50 cursor-pointer"
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={empFilter.includes(emp.id)}
-                                    onChange={() => {
-                                      setEmpFilter((prev) =>
-                                        prev.includes(emp.id)
-                                          ? prev.filter((id) => id !== emp.id)
-                                          : [...prev, emp.id],
-                                      );
-                                    }}
-                                    className="rounded w-4 h-4"
-                                  />
-                                  <span className="truncate">{emp.name}</span>
-                                </label>
-                              ))}
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </th>
-                {calendarData.map((day, dIdx) => {
-                  const weekStart = dIdx - (dIdx % 7);
-                  const isWeekWithShift = weeksWithShifts.has(weekStart);
-                  const isFocused = focusedDate === day.fullDate;
-                  const isSelected = selectedDates.includes(day.fullDate);
-                  const today = new Date();
-                  const todayStr = `${today.getFullYear()}-${String(
-                    today.getMonth() + 1,
-                  ).padStart(2, "0")}-${String(today.getDate()).padStart(
-                    2,
-                    "0",
-                  )}`;
-                  const isToday = day.fullDate === todayStr;
-                  return (
-                    <th
-                      key={day.fullDate}
-                      onClick={(e) => {
-                        if (e.shiftKey && lastSelectedDate) {
-                          // Range selection with Shift
-                          e.preventDefault();
-                          const lastIndex = calendarData.findIndex(
-                            (d) => d.fullDate === lastSelectedDate,
-                          );
-                          const currentIndex = dIdx;
-                          const startIdx = Math.min(lastIndex, currentIndex);
-                          const endIdx = Math.max(lastIndex, currentIndex);
-                          const rangeSelection = calendarData
-                            .slice(startIdx, endIdx + 1)
-                            .map((d) => d.fullDate);
-                          setSelectedDates((prev) => {
-                            // Merge with existing selection
-                            const newSet = new Set([
-                              ...prev,
-                              ...rangeSelection,
-                            ]);
-                            return Array.from(newSet);
-                          });
-                          setLastSelectedDate(day.fullDate);
-                        } else if (e.ctrlKey || e.metaKey) {
-                          // Toggle single selection with Ctrl
-                          e.preventDefault();
-                          setSelectedDates((prev) => {
-                            const isCurrentlySelected = prev.includes(
-                              day.fullDate,
-                            );
-                            const newSelection = isCurrentlySelected
-                              ? prev.filter((d) => d !== day.fullDate)
-                              : [...prev, day.fullDate];
-                            return newSelection;
-                          });
-                          setLastSelectedDate(day.fullDate);
-                        } else {
-                          // Single click - toggle selection
-                          if (isSelected) {
-                            // If already selected, deselect
-                            setSelectedDates([]);
-                            setLastSelectedDate(null);
-                          } else {
-                            // If not selected, select it
-                            setSelectedDates([day.fullDate]);
-                            setLastSelectedDate(day.fullDate);
-                          }
-                          // Clear focus only on desktop
-                          if (window.innerWidth >= 768) {
-                            setFocusedDate(null);
-                          }
-                        }
-                      }}
-                      className={`p-1 md:p-1.5 border-b min-w-[40px] md:min-w-[48px] text-center relative cursor-pointer transition-all sticky top-0 z-10 print:static ${
-                        !isWeekWithShift ? "no-shift-week" : ""
-                      } ${
-                        isToday
-                          ? "bg-green-200 ring-2 md:ring-4 ring-green-500 ring-inset font-bold z-10 print:bg-green-200"
-                          : isSelected
-                            ? "bg-blue-200 border-l-2 md:border-l-4 border-r-2 md:border-r-4 border-t-2 md:border-t-4 border-blue-500 z-10"
-                            : isFocused
-                              ? "bg-yellow-100 border-l-2 md:border-l-4 border-r-2 md:border-r-4 border-t-2 md:border-t-4 border-yellow-500 z-10"
-                              : day.isWeekend
-                                ? "bg-indigo-50 print:bg-gray-100 border-r"
-                                : "bg-gray-100 border-r"
-                      } ${
-                        day.isPtHoliday && !isFocused && !isSelected && !isToday
-                          ? "bg-red-50 print:bg-gray-200"
-                          : ""
-                      } print:border-black hover:bg-gray-200`}
-                      title={
-                        isSelected
-                          ? "Selected - Shift+Click to extend, Ctrl+Click to deselect"
-                          : "Click to focus, Ctrl+Click to add, Shift+Click for range"
-                      }
-                    >
-                      <div className="text-xs md:text-xs font-bold text-gray-700 print:text-black">
-                        {day.date}
-                      </div>
-                      <div className="text-[10px] md:text-xs text-gray-500 uppercase print:text-black">
-                        {day.weekDay}
-                      </div>
-                    </th>
-                  );
-                })}
-              </tr>
-            </thead>
-            <tbody>
-              {filteredTeam.map((emp) => {
-                let prevShift: ShiftType | null = null;
-                // Visual Dimming for Editor if not their row
-                const isMyRow = loggedInUserId === emp.id;
-                const isDimmed = currentUser.role === "editor" && !isMyRow;
-                const isFocusedRow = focusedEmployeeId === emp.id;
-
-                // Get all shifts for this employee for overflow check
-                const empShifts = calendarData.map((day) => day.shifts[emp.id]);
-
-                return (
-                  <tr
-                    key={emp.id}
-                    className={`transition-colors print:break-inside-avoid ${
-                      isDimmed ? "opacity-50 grayscale" : "hover:bg-gray-50"
-                    }`}
-                  >
-                    <td
-                      onClick={() =>
-                        setFocusedEmployeeId(isFocusedRow ? null : emp.id)
-                      }
-                      className={`p-1 md:p-1.5 border-b bg-white sticky left-0 z-10 shadow-sm print:static print:border-black print:shadow-none group cursor-pointer ${
-                        isFocusedRow
-                          ? "border-l-2 md:border-l-4 border-t-2 md:border-t-4 border-b-2 md:border-b-4 border-yellow-500 bg-yellow-50"
-                          : "border-r"
-                      }`}
-                      title="Click to focus this employee"
-                    >
-                      <div className="flex justify-between items-center">
-                        <div className="font-bold text-xs md:text-xs text-gray-800 print:text-black">
-                          {emp.name}
-                        </div>
-
-                        {/* Only show per-row bulk action if manager (kept for quick access) */}
-                        {isManager && (
-                          <button
-                            onClick={() => {
-                              setPreSelectedBulkId(String(emp.id));
-                              setShowBulkModal(true);
-                            }}
-                            className="opacity-0 group-hover:opacity-100 p-0.5 md:p-1 hover:bg-gray-100 rounded text-gray-500 print:hidden transition-opacity"
-                            title={t.bulkActions}
-                          >
-                            <MoreHorizontal
-                              size={12}
-                              className="md:w-4 md:h-4"
+              <table className="w-full border-collapse text-base sm:text-sm print:text-[8px]">
+                <thead className="bg-gray-100 print:static">
+                  <tr>
+                    <th className="p-1 md:p-1.5 text-left border-b border-r min-w-[140px] md:min-w-[200px] bg-gray-100 sticky left-0 top-0 z-30 shadow-sm print:static print:bg-white print:border-black">
+                      <div className="flex items-center justify-between gap-1 md:gap-2 relative group">
+                        <div className="flex items-center gap-1 md:gap-2">
+                          {t.colaborador}
+                          {sortOrder === "AZ" && (
+                            <ArrowDownAZ
+                              size={14}
+                              className="text-indigo-600 ml-1 print:hidden"
                             />
-                          </button>
+                          )}
+                          {sortOrder === "ZA" && (
+                            <ArrowDownZA
+                              size={14}
+                              className="text-indigo-600 ml-1 print:hidden"
+                            />
+                          )}
+                          {sortOrder === "ROLE" && (
+                            <Briefcase
+                              size={14}
+                              className="text-indigo-600 ml-1 print:hidden"
+                            />
+                          )}
+                        </div>
+
+                        {/* Excel-style filter button */}
+                        <button
+                          onClick={() =>
+                            setMobileFilterEmpOpen(!mobileFilterEmpOpen)
+                          }
+                          className={`p-0.5 rounded transition-colors print:hidden ${
+                            empFilter.length > 0
+                              ? "bg-blue-500 text-white"
+                              : "text-gray-500 hover:text-gray-700 hover:bg-gray-200"
+                          }`}
+                          title="Filter employees"
+                        >
+                          <Filter size={14} />
+                        </button>
+
+                        {/* Excel-style filter dropdown */}
+                        {mobileFilterEmpOpen && (
+                          <>
+                            <div
+                              className="fixed inset-0 z-40"
+                              onClick={() => setMobileFilterEmpOpen(false)}
+                            />
+                            <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-2xl border border-gray-300 py-1 z-[9999] min-w-[220px] max-h-96 overflow-y-auto">
+                              {/* Select All / Clear All buttons */}
+                              <div className="border-b border-gray-200 px-3 py-2 flex gap-2">
+                                <button
+                                  onClick={() =>
+                                    setEmpFilter(teamState.map((e) => e.id))
+                                  }
+                                  className="flex-1 text-xs px-2 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded hover:bg-blue-100 font-medium"
+                                >
+                                  All
+                                </button>
+                                <button
+                                  onClick={() => setEmpFilter([])}
+                                  className="flex-1 text-xs px-2 py-1 bg-gray-100 text-gray-700 border border-gray-300 rounded hover:bg-gray-200 font-medium"
+                                >
+                                  Clear
+                                </button>
+                              </div>
+
+                              {/* Employee checkboxes */}
+                              <div className="p-1">
+                                {teamState
+                                  .sort((a, b) => a.name.localeCompare(b.name))
+                                  .map((emp) => (
+                                    <label
+                                      key={emp.id}
+                                      className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-gray-50 cursor-pointer"
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={empFilter.includes(emp.id)}
+                                        onChange={() => {
+                                          setEmpFilter((prev) =>
+                                            prev.includes(emp.id)
+                                              ? prev.filter(
+                                                  (id) => id !== emp.id,
+                                                )
+                                              : [...prev, emp.id],
+                                          );
+                                        }}
+                                        className="rounded w-4 h-4"
+                                      />
+                                      <span className="truncate">
+                                        {emp.name}
+                                      </span>
+                                    </label>
+                                  ))}
+                              </div>
+                            </div>
+                          </>
                         )}
                       </div>
-                      <div className="text-[10px] text-gray-500 flex flex-wrap gap-1 print:hidden">
-                        {emp.role}{" "}
-                        <span className="text-indigo-600 font-mono">
-                          [{emp.languages.join(" ")}]
-                        </span>
-                        {emp.rotationMode &&
-                          emp.rotationMode !== "STANDARD" && (
-                            <span className="text-orange-600 font-bold ml-1">
-                              ({emp.rotationMode.replace("FIXED_", "")})
-                            </span>
-                          )}
-                      </div>
-                    </td>
+                    </th>
                     {calendarData.map((day, dIdx) => {
-                      const shift = day.shifts[emp.id];
                       const weekStart = dIdx - (dIdx % 7);
                       const isWeekWithShift = weeksWithShifts.has(weekStart);
                       const isFocused = focusedDate === day.fullDate;
+                      const isSelected = selectedDates.includes(day.fullDate);
                       const today = new Date();
                       const todayStr = `${today.getFullYear()}-${String(
                         today.getMonth() + 1,
@@ -4499,63 +4412,248 @@ const ShiftScheduler = () => {
                         "0",
                       )}`;
                       const isToday = day.fullDate === todayStr;
-                      const isLastCell = dIdx === calendarData.length - 1;
-                      const isRestViolation =
-                        dIdx > 0 &&
-                        checkRestViolation(
-                          prevShift as ShiftType,
-                          shift as ShiftType,
-                        );
-                      const shiftOverflowInfo = checkShiftOverflow(
-                        empShifts,
-                        dIdx,
-                      );
-                      const isPending = day.pendingReqs[emp.id]; // Check for pending
-                      const pendingRequestedShift =
-                        day.pendingReqShifts?.[emp.id];
-                      const previewShift =
-                        pendingRequestedShift === undefined
-                          ? "F"
-                          : pendingRequestedShift;
-                      const showManagerPreview = isManager && isPending;
-                      const showEditorRequestPreview =
-                        currentUser.role === "editor" &&
-                        emp.id === loggedInUserId &&
-                        isPending;
-                      // Check if this cell has a pending selection (not yet submitted)
-                      const cellKey = `${emp.id}_${day.fullDate}`;
-                      const hasPendingSelection =
-                        Object.prototype.hasOwnProperty.call(
-                          pendingSelections,
-                          cellKey,
-                        );
-                      const pendingSelectionValue = pendingSelections[cellKey];
-                      // Display requested shift for managers; otherwise show pending selection if any
-                      const displayShift =
-                        showManagerPreview || showEditorRequestPreview
-                          ? previewShift
-                          : hasPendingSelection &&
-                            pendingSelectionValue !== undefined
-                          ? pendingSelectionValue
-                          : shift;
-                      const pendingIconClass =
-                        displayShift === "N" ? "text-white" : "text-gray-700";
-                      const showEditorPendingIcon =
-                        currentUser.role === "editor" &&
-                        emp.id === loggedInUserId &&
-                        hasPendingSelection;
-                      prevShift = shift as ShiftType;
-
-                      const isBothFocused = isFocusedRow && isFocused;
-                      const isSelected = selectedDates.includes(day.fullDate);
-
                       return (
-                        <td
+                        <th
                           key={day.fullDate}
-                          onClick={(e) =>
-                            handleCellClick(e, emp.id, day.fullDate, emp.name)
+                          onClick={(e) => {
+                            if (e.shiftKey && lastSelectedDate) {
+                              // Range selection with Shift
+                              e.preventDefault();
+                              const lastIndex = calendarData.findIndex(
+                                (d) => d.fullDate === lastSelectedDate,
+                              );
+                              const currentIndex = dIdx;
+                              const startIdx = Math.min(
+                                lastIndex,
+                                currentIndex,
+                              );
+                              const endIdx = Math.max(lastIndex, currentIndex);
+                              const rangeSelection = calendarData
+                                .slice(startIdx, endIdx + 1)
+                                .map((d) => d.fullDate);
+                              setSelectedDates((prev) => {
+                                // Merge with existing selection
+                                const newSet = new Set([
+                                  ...prev,
+                                  ...rangeSelection,
+                                ]);
+                                return Array.from(newSet);
+                              });
+                              setLastSelectedDate(day.fullDate);
+                            } else if (e.ctrlKey || e.metaKey) {
+                              // Toggle single selection with Ctrl
+                              e.preventDefault();
+                              setSelectedDates((prev) => {
+                                const isCurrentlySelected = prev.includes(
+                                  day.fullDate,
+                                );
+                                const newSelection = isCurrentlySelected
+                                  ? prev.filter((d) => d !== day.fullDate)
+                                  : [...prev, day.fullDate];
+                                return newSelection;
+                              });
+                              setLastSelectedDate(day.fullDate);
+                            } else {
+                              // Single click - toggle selection
+                              if (isSelected) {
+                                // If already selected, deselect
+                                setSelectedDates([]);
+                                setLastSelectedDate(null);
+                              } else {
+                                // If not selected, select it
+                                setSelectedDates([day.fullDate]);
+                                setLastSelectedDate(day.fullDate);
+                              }
+                              // Clear focus only on desktop
+                              if (window.innerWidth >= 768) {
+                                setFocusedDate(null);
+                              }
+                            }
+                          }}
+                          className={`p-1 md:p-1.5 border-b min-w-[40px] md:min-w-[48px] text-center relative cursor-pointer transition-all sticky top-0 z-10 print:static ${
+                            !isWeekWithShift ? "no-shift-week" : ""
+                          } ${
+                            isToday
+                              ? "bg-green-200 ring-2 md:ring-4 ring-green-500 ring-inset font-bold z-10 print:bg-green-200"
+                              : isSelected
+                                ? "bg-blue-200 border-l-2 md:border-l-4 border-r-2 md:border-r-4 border-t-2 md:border-t-4 border-blue-500 z-10"
+                                : isFocused
+                                  ? "bg-yellow-100 border-l-2 md:border-l-4 border-r-2 md:border-r-4 border-t-2 md:border-t-4 border-yellow-500 z-10"
+                                  : day.isWeekend
+                                    ? "bg-indigo-50 print:bg-gray-100 border-r"
+                                    : "bg-gray-100 border-r"
+                          } ${
+                            day.isPtHoliday &&
+                            !isFocused &&
+                            !isSelected &&
+                            !isToday
+                              ? "bg-red-50 print:bg-gray-200"
+                              : ""
+                          } print:border-black hover:bg-gray-200`}
+                          title={
+                            isSelected
+                              ? "Selected - Shift+Click to extend, Ctrl+Click to deselect"
+                              : "Click to focus, Ctrl+Click to add, Shift+Click for range"
                           }
-                          className={`
+                        >
+                          <div className="text-xs md:text-xs font-bold text-gray-700 print:text-black">
+                            {day.date}
+                          </div>
+                          <div className="text-[10px] md:text-xs text-gray-500 uppercase print:text-black">
+                            {day.weekDay}
+                          </div>
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredTeam.map((emp) => {
+                    let prevShift: ShiftType | null = null;
+                    // Visual Dimming for Editor if not their row
+                    const isMyRow = loggedInUserId === emp.id;
+                    const isDimmed = currentUser.role === "editor" && !isMyRow;
+                    const isFocusedRow = focusedEmployeeId === emp.id;
+
+                    // Get all shifts for this employee for overflow check
+                    const empShifts = calendarData.map(
+                      (day) => day.shifts[emp.id],
+                    );
+
+                    return (
+                      <tr
+                        key={emp.id}
+                        className={`transition-colors print:break-inside-avoid ${
+                          isDimmed ? "opacity-50 grayscale" : "hover:bg-gray-50"
+                        }`}
+                      >
+                        <td
+                          onClick={() =>
+                            setFocusedEmployeeId(isFocusedRow ? null : emp.id)
+                          }
+                          className={`p-1 md:p-1.5 border-b bg-white sticky left-0 z-10 shadow-sm print:static print:border-black print:shadow-none group cursor-pointer ${
+                            isFocusedRow
+                              ? "border-l-2 md:border-l-4 border-t-2 md:border-t-4 border-b-2 md:border-b-4 border-yellow-500 bg-yellow-50"
+                              : "border-r"
+                          }`}
+                          title="Click to focus this employee"
+                        >
+                          <div className="flex justify-between items-center">
+                            <div className="font-bold text-xs md:text-xs text-gray-800 print:text-black">
+                              {emp.name}
+                            </div>
+
+                            {/* Only show per-row bulk action if manager (kept for quick access) */}
+                            {canBulkActions && (
+                              <button
+                                onClick={() => {
+                                  setPreSelectedBulkId(String(emp.id));
+                                  setShowBulkModal(true);
+                                }}
+                                className="opacity-0 group-hover:opacity-100 p-0.5 md:p-1 hover:bg-gray-100 rounded text-gray-500 print:hidden transition-opacity"
+                                title={t.bulkActions}
+                              >
+                                <MoreHorizontal
+                                  size={12}
+                                  className="md:w-4 md:h-4"
+                                />
+                              </button>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-gray-500 flex flex-wrap gap-1 print:hidden">
+                            {emp.role}{" "}
+                            <span className="text-indigo-600 font-mono">
+                              [{emp.languages.join(" ")}]
+                            </span>
+                            {emp.rotationMode &&
+                              emp.rotationMode !== "STANDARD" && (
+                                <span className="text-orange-600 font-bold ml-1">
+                                  ({emp.rotationMode.replace("FIXED_", "")})
+                                </span>
+                              )}
+                          </div>
+                        </td>
+                        {calendarData.map((day, dIdx) => {
+                          const shift = day.shifts[emp.id];
+                          const weekStart = dIdx - (dIdx % 7);
+                          const isWeekWithShift =
+                            weeksWithShifts.has(weekStart);
+                          const isFocused = focusedDate === day.fullDate;
+                          const today = new Date();
+                          const todayStr = `${today.getFullYear()}-${String(
+                            today.getMonth() + 1,
+                          ).padStart(2, "0")}-${String(
+                            today.getDate(),
+                          ).padStart(2, "0")}`;
+                          const isToday = day.fullDate === todayStr;
+                          const isLastCell = dIdx === calendarData.length - 1;
+                          const isRestViolation =
+                            dIdx > 0 &&
+                            checkRestViolation(
+                              prevShift as ShiftType,
+                              shift as ShiftType,
+                            );
+                          const shiftOverflowInfo = checkShiftOverflow(
+                            empShifts,
+                            dIdx,
+                          );
+                          const isPending = day.pendingReqs[emp.id]; // Check for pending
+                          const pendingRequestedShift =
+                            day.pendingReqShifts?.[emp.id];
+                          const previewShift =
+                            pendingRequestedShift === undefined
+                              ? "F"
+                              : pendingRequestedShift;
+                          const showManagerPreview =
+                            canViewRequests && isPending;
+                          const showEditorRequestPreview =
+                            currentUser.role === "editor" &&
+                            emp.id === loggedInUserId &&
+                            isPending;
+                          // Check if this cell has a pending selection (not yet submitted)
+                          const cellKey = `${emp.id}_${day.fullDate}`;
+                          const hasPendingSelection =
+                            Object.prototype.hasOwnProperty.call(
+                              pendingSelections,
+                              cellKey,
+                            );
+                          const pendingSelectionValue =
+                            pendingSelections[cellKey];
+                          // Display requested shift for managers; otherwise show pending selection if any
+                          const displayShift =
+                            showManagerPreview || showEditorRequestPreview
+                              ? previewShift
+                              : hasPendingSelection &&
+                                  pendingSelectionValue !== undefined
+                                ? pendingSelectionValue
+                                : shift;
+                          const pendingIconClass =
+                            displayShift === "N"
+                              ? "text-white"
+                              : "text-gray-700";
+                          const showEditorPendingIcon =
+                            currentUser.role === "editor" &&
+                            emp.id === loggedInUserId &&
+                            hasPendingSelection;
+                          prevShift = shift as ShiftType;
+
+                          const isBothFocused = isFocusedRow && isFocused;
+                          const isSelected = selectedDates.includes(
+                            day.fullDate,
+                          );
+
+                          return (
+                            <td
+                              key={day.fullDate}
+                              onClick={(e) =>
+                                handleCellClick(
+                                  e,
+                                  emp.id,
+                                  day.fullDate,
+                                  emp.name,
+                                )
+                              }
+                              className={`
                             border-b p-1 md:p-1.5 text-center transition print:cursor-default relative
                             ${!isWeekWithShift ? "no-shift-week" : ""}
                             ${
@@ -4575,17 +4673,17 @@ const ShiftScheduler = () => {
                             }
                             cursor-pointer hover:opacity-80
                           `}
-                        >
-                          <div
-                            onClick={(e) => {
-                              handleCellClick(
-                                e,
-                                emp.id,
-                                day.fullDate,
-                                emp.name,
-                              );
-                            }}
-                            className={`
+                            >
+                              <div
+                                onClick={(e) => {
+                                  handleCellClick(
+                                    e,
+                                    emp.id,
+                                    day.fullDate,
+                                    emp.name,
+                                  );
+                                }}
+                                className={`
                               w-full h-7 md:h-8 rounded flex items-center justify-center text-xs md:text-xs font-bold shadow-sm print:shadow-none print:rounded-none border relative
                               ${
                                 shiftOverflowInfo.hasShiftOverflow
@@ -4602,384 +4700,400 @@ const ShiftScheduler = () => {
                                     : ""
                               }
                             `}
-                            style={getShiftStyle(displayShift)}
-                            title={
-                              shiftOverflowInfo.hasShiftOverflow
-                                ? "ShiftOverflow (>40h)"
-                                : isPending
-                                  ? t.pending
-                                  : hasPendingSelection
-                                    ? `${t.pendingSelections || "Pending Selection"} - Click Submit to request approval`
-                                    : isRestViolation
-                                      ? t.restWarn
-                                      : ""
-                            }
-                          >
-                            {(isPending || showEditorPendingIcon) && (
-                              <div className="absolute top-0 right-0 z-10 p-0.5">
-                                <Clock size={12} className={pendingIconClass} />
-                              </div>
-                            )}
-                            {hasPendingSelection && (
-                              <div className="absolute top-0 right-0 w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                            )}
-                            {displayShift === "F" ? "" : displayShift}
-                            {shiftOverflowInfo.hasShiftOverflow &&
-                              !isPending && (
-                                <AlertCircle
-                                  size={10}
-                                  className="absolute top-0 right-0 text-red-600 bg-white rounded-full"
-                                />
-                              )}
-                            {isRestViolation &&
-                              !isPending &&
-                              !shiftOverflowInfo.hasShiftOverflow && (
-                                <AlertCircle
-                                  size={10}
-                                  className="absolute top-0 right-0 text-orange-600 bg-white rounded-full"
-                                />
-                              )}
-                          </div>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
-              {/* Coverage Analysis - Issues Section (Visible to Escalator and Manager only) */}
-              {canWrite && (
-                <>
-                  <tr className="bg-gray-800 text-white font-bold print:bg-gray-200 print:text-black print:border-t-2 print:border-black">
-                    <td className="p-2 border-r sticky left-0 bg-gray-800 z-10 shadow-sm print:static print:bg-transparent">
-                      {t.analise}
-                    </td>
-                    <td
-                      colSpan={calendarData.length}
-                      className="p-2 text-xs font-normal"
-                    >
-                      {t.analiseDesc}
-                    </td>
-                  </tr>
-                  {["M", "T", "N"].map((shiftCode, shiftIdx) => (
-                    <tr key={shiftCode} className="bg-gray-50 print:bg-white">
-                      <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
-                        {t.faltas}:{" "}
-                        {shiftCode === "M"
-                          ? t.manha
-                          : shiftCode === "T"
-                            ? t.tarde
-                            : t.noite}
-                      </td>
-                      {calendarData.map((day) => {
-                        const missing =
-                          day.missing[shiftCode as "M" | "T" | "N"];
-                        const isLowStaff =
-                          day.lowStaff[shiftCode as "M" | "T" | "N"];
-                        const hasErr = missing.length > 0 || isLowStaff;
-                        const isFocused = focusedDate === day.fullDate;
-                        const isLastAnalysisRow = shiftIdx === 2;
-                        return (
-                          <td
-                            key={day.fullDate}
-                            className={`border-b p-1 text-center text-[10px] ${
-                              isFocused
-                                ? `bg-yellow-50 border-l-4 border-r-4 border-yellow-500 ${
-                                    isLastAnalysisRow ? "border-b-4" : ""
-                                  }`
-                                : hasErr
-                                  ? "bg-red-100 print:bg-gray-100 border-r"
-                                  : "border-r"
-                            } print:border-black`}
-                          >
-                            {hasErr ? (
-                              <div className="text-red-600 font-bold flex flex-col items-center justify-center h-full group relative cursor-help print:text-black">
-                                <AlertTriangle
-                                  size={12}
-                                  className="mb-1 print:text-black"
-                                />
-                                <span className="print:text-[8px]">
-                                  {missing.join(",")}
-                                </span>
-                                {isLowStaff && (
-                                  <span className="text-[8px] whitespace-nowrap">
-                                    {t.lowStaff}
-                                  </span>
+                                style={getShiftStyle(displayShift)}
+                                title={
+                                  shiftOverflowInfo.hasShiftOverflow
+                                    ? "ShiftOverflow (>40h)"
+                                    : isPending
+                                      ? t.pending
+                                      : hasPendingSelection
+                                        ? `${t.pendingSelections || "Pending Selection"} - Click Submit to request approval`
+                                        : isRestViolation
+                                          ? t.restWarn
+                                          : ""
+                                }
+                              >
+                                {(isPending || showEditorPendingIcon) && (
+                                  <div className="absolute top-0 right-0 z-10 p-0.5">
+                                    <Clock
+                                      size={12}
+                                      className={pendingIconClass}
+                                    />
+                                  </div>
                                 )}
+                                {hasPendingSelection && (
+                                  <div className="absolute top-0 right-0 w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                                )}
+                                {displayShift === "F" ? "" : displayShift}
+                                {shiftOverflowInfo.hasShiftOverflow &&
+                                  !isPending && (
+                                    <AlertCircle
+                                      size={10}
+                                      className="absolute top-0 right-0 text-red-600 bg-white rounded-full"
+                                    />
+                                  )}
+                                {isRestViolation &&
+                                  !isPending &&
+                                  !shiftOverflowInfo.hasShiftOverflow && (
+                                    <AlertCircle
+                                      size={10}
+                                      className="absolute top-0 right-0 text-orange-600 bg-white rounded-full"
+                                    />
+                                  )}
                               </div>
-                            ) : (
-                              <div className="text-green-300 print:text-gray-300">
-                                <CheckCircle size={12} />
-                              </div>
-                            )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                  {/* Coverage Analysis - Issues Section (Visible to Escalator and Manager only) */}
+                  {canViewCoverage && (
+                    <>
+                      <tr className="bg-gray-800 text-white font-bold print:bg-gray-200 print:text-black print:border-t-2 print:border-black">
+                        <td className="p-2 border-r sticky left-0 bg-gray-800 z-10 shadow-sm print:static print:bg-transparent">
+                          {t.analise}
+                        </td>
+                        <td
+                          colSpan={calendarData.length}
+                          className="p-2 text-xs font-normal"
+                        >
+                          {t.analiseDesc}
+                        </td>
+                      </tr>
+                      {["M", "T", "N"].map((shiftCode, shiftIdx) => (
+                        <tr
+                          key={shiftCode}
+                          className="bg-gray-50 print:bg-white"
+                        >
+                          <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
+                            {t.faltas}:{" "}
+                            {shiftCode === "M"
+                              ? t.manha
+                              : shiftCode === "T"
+                                ? t.tarde
+                                : t.noite}
                           </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </>
-              )}
+                          {calendarData.map((day) => {
+                            const missing =
+                              day.missing[shiftCode as "M" | "T" | "N"];
+                            const isLowStaff =
+                              day.lowStaff[shiftCode as "M" | "T" | "N"];
+                            const hasErr = missing.length > 0 || isLowStaff;
+                            const isFocused = focusedDate === day.fullDate;
+                            const isLastAnalysisRow = shiftIdx === 2;
+                            return (
+                              <td
+                                key={day.fullDate}
+                                className={`border-b p-1 text-center text-[10px] ${
+                                  isFocused
+                                    ? `bg-yellow-50 border-l-4 border-r-4 border-yellow-500 ${
+                                        isLastAnalysisRow ? "border-b-4" : ""
+                                      }`
+                                    : hasErr
+                                      ? "bg-red-100 print:bg-gray-100 border-r"
+                                      : "border-r"
+                                } print:border-black`}
+                              >
+                                {hasErr ? (
+                                  <div className="text-red-600 font-bold flex flex-col items-center justify-center h-full group relative cursor-help print:text-black">
+                                    <AlertTriangle
+                                      size={12}
+                                      className="mb-1 print:text-black"
+                                    />
+                                    <span className="print:text-[8px]">
+                                      {missing.join(",")}
+                                    </span>
+                                    {isLowStaff && (
+                                      <span className="text-[8px] whitespace-nowrap">
+                                        {t.lowStaff}
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="text-green-300 print:text-gray-300">
+                                    <CheckCircle size={12} />
+                                  </div>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </>
+                  )}
 
-              {/* Complete Coverage Analysis - Manager Only */}
-              {isManager && (
-                <>
-                  <tr className="bg-gray-50 print:bg-white">
-                    <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
-                      Counts
-                    </td>
-                    {calendarData.map((day) => {
-                      const isFocused = focusedDate === day.fullDate;
-                      const c = day.counts;
-                      return (
-                        <td
-                          key={day.fullDate}
-                          className={`border-b border-r p-1 text-center text-[10px] ${
-                            isFocused
-                              ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
-                              : ""
-                          } print:border-black`}
-                        >
-                          <div className="flex items-center justify-center gap-1">
-                            <span
-                              className="px-1.5 py-0.5 rounded border text-[10px] font-semibold"
-                              style={getShiftStyle("M")}
-                              title="Morning count"
+                  {/* Complete Coverage Analysis - Manager Only */}
+                  {canManage && canViewCoverage && (
+                    <>
+                      <tr className="bg-gray-50 print:bg-white">
+                        <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
+                          Counts
+                        </td>
+                        {calendarData.map((day) => {
+                          const isFocused = focusedDate === day.fullDate;
+                          const c = day.counts;
+                          return (
+                            <td
+                              key={day.fullDate}
+                              className={`border-b border-r p-1 text-center text-[10px] ${
+                                isFocused
+                                  ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
+                                  : ""
+                              } print:border-black`}
                             >
-                              M: {c.M}
-                            </span>
-                            <span
-                              className="px-1.5 py-0.5 rounded border text-[10px] font-semibold"
-                              style={getShiftStyle("T")}
-                              title="Afternoon count"
+                              <div className="flex items-center justify-center gap-1">
+                                <span
+                                  className="px-1.5 py-0.5 rounded border text-[10px] font-semibold"
+                                  style={getShiftStyle("M")}
+                                  title="Morning count"
+                                >
+                                  M: {c.M}
+                                </span>
+                                <span
+                                  className="px-1.5 py-0.5 rounded border text-[10px] font-semibold"
+                                  style={getShiftStyle("T")}
+                                  title="Afternoon count"
+                                >
+                                  T: {c.T}
+                                </span>
+                                <span
+                                  className="px-1.5 py-0.5 rounded border text-[10px] font-semibold"
+                                  style={getShiftStyle("N")}
+                                  title="Night count"
+                                >
+                                  N: {c.N}
+                                </span>
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                      <tr className="bg-gray-50 print:bg-white">
+                        <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
+                          On Duty
+                        </td>
+                        {calendarData.map((day) => {
+                          const isFocused = focusedDate === day.fullDate;
+                          const total =
+                            day.counts.M + day.counts.T + day.counts.N;
+                          return (
+                            <td
+                              key={day.fullDate}
+                              className={`border-b border-r p-1 text-center text-[10px] ${
+                                isFocused
+                                  ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
+                                  : ""
+                              } print:border-black`}
                             >
-                              T: {c.T}
-                            </span>
-                            <span
-                              className="px-1.5 py-0.5 rounded border text-[10px] font-semibold"
-                              style={getShiftStyle("N")}
-                              title="Night count"
+                              {total}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                      <tr className="bg-gray-50 print:bg-white">
+                        <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
+                          Hours
+                        </td>
+                        {calendarData.map((day) => {
+                          const isFocused = focusedDate === day.fullDate;
+                          const hours =
+                            day.counts.M * hoursConfig.M +
+                            day.counts.T * hoursConfig.T +
+                            day.counts.N * hoursConfig.N;
+                          return (
+                            <td
+                              key={day.fullDate}
+                              className={`border-b border-r p-1 text-center text-[10px] ${
+                                isFocused
+                                  ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
+                                  : ""
+                              } print:border-black`}
                             >
-                              N: {c.N}
-                            </span>
-                          </div>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                  <tr className="bg-gray-50 print:bg-white">
-                    <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
-                      On Duty
-                    </td>
-                    {calendarData.map((day) => {
-                      const isFocused = focusedDate === day.fullDate;
-                      const total = day.counts.M + day.counts.T + day.counts.N;
-                      return (
-                        <td
-                          key={day.fullDate}
-                          className={`border-b border-r p-1 text-center text-[10px] ${
-                            isFocused
-                              ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
-                              : ""
-                          } print:border-black`}
+                              {hours}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                      {canViewRequests && (
+                        <tr className="bg-gray-50 print:bg-white">
+                          <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
+                            Requests
+                          </td>
+                          {calendarData.map((day) => {
+                            const isFocused = focusedDate === day.fullDate;
+                            const pendingCount = Object.values(
+                              day.pendingReqs || {},
+                            ).filter(Boolean).length;
+                            return (
+                              <td
+                                key={day.fullDate}
+                                className={`border-b border-r p-1 text-center text-[10px] ${
+                                  isFocused
+                                    ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
+                                    : ""
+                                } print:border-black`}
+                              >
+                                {pendingCount}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      )}
+                      {ALL_LANGUAGES.map((lng) => (
+                        <tr
+                          key={`lng-${lng}`}
+                          className="bg-gray-50 print:bg-white"
                         >
-                          {total}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                  <tr className="bg-gray-50 print:bg-white">
-                    <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
-                      Hours
-                    </td>
-                    {calendarData.map((day) => {
-                      const isFocused = focusedDate === day.fullDate;
-                      const hours =
-                        day.counts.M * hoursConfig.M +
-                        day.counts.T * hoursConfig.T +
-                        day.counts.N * hoursConfig.N;
-                      return (
-                        <td
-                          key={day.fullDate}
-                          className={`border-b border-r p-1 text-center text-[10px] ${
-                            isFocused
-                              ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
-                              : ""
-                          } print:border-black`}
-                        >
-                          {hours}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                  <tr className="bg-gray-50 print:bg-white">
-                    <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
-                      Requests
-                    </td>
-                    {calendarData.map((day) => {
-                      const isFocused = focusedDate === day.fullDate;
-                      const pendingCount = Object.values(
-                        day.pendingReqs || {},
-                      ).filter(Boolean).length;
-                      return (
-                        <td
-                          key={day.fullDate}
-                          className={`border-b border-r p-1 text-center text-[10px] ${
-                            isFocused
-                              ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
-                              : ""
-                          } print:border-black`}
-                        >
-                          {pendingCount}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                  {ALL_LANGUAGES.map((lng) => (
-                    <tr
-                      key={`lng-${lng}`}
-                      className="bg-gray-50 print:bg-white"
+                          <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
+                            {lng} Overflow
+                          </td>
+                          {calendarData.map((day) => {
+                            const isFocused = focusedDate === day.fullDate;
+                            const countM = filteredTeam.reduce((acc, emp) => {
+                              return (
+                                acc +
+                                (day.shifts[emp.id] === "M" &&
+                                emp.languages.includes(lng)
+                                  ? 1
+                                  : 0)
+                              );
+                            }, 0);
+                            const countT = filteredTeam.reduce((acc, emp) => {
+                              return (
+                                acc +
+                                (day.shifts[emp.id] === "T" &&
+                                emp.languages.includes(lng)
+                                  ? 1
+                                  : 0)
+                              );
+                            }, 0);
+                            const countN = filteredTeam.reduce((acc, emp) => {
+                              return (
+                                acc +
+                                (day.shifts[emp.id] === "N" &&
+                                emp.languages.includes(lng)
+                                  ? 1
+                                  : 0)
+                              );
+                            }, 0);
+
+                            const ovM = Math.max(0, countM - 1);
+                            const ovT = Math.max(0, countT - 1);
+                            const ovN = Math.max(0, countN - 1);
+
+                            return (
+                              <td
+                                key={day.fullDate}
+                                className={`border-b border-r p-1 text-center text-[10px] ${
+                                  isFocused
+                                    ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
+                                    : ""
+                                } print:border-black`}
+                                title={`M:${countM} T:${countT} N:${countN}`}
+                              >
+                                <div className="flex items-center justify-center gap-1">
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded border text-[10px] font-semibold ${
+                                      ovM > 0 ? "" : "opacity-60"
+                                    }`}
+                                    style={getShiftStyle("M")}
+                                  >
+                                    M:+{ovM}
+                                  </span>
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded border text-[10px] font-semibold ${
+                                      ovT > 0 ? "" : "opacity-60"
+                                    }`}
+                                    style={getShiftStyle("T")}
+                                  >
+                                    T:+{ovT}
+                                  </span>
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded border text-[10px] font-semibold ${
+                                      ovN > 0 ? "" : "opacity-60"
+                                    }`}
+                                    style={getShiftStyle("N")}
+                                  >
+                                    N:+{ovN}
+                                  </span>
+                                </div>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </>
+                  )}
+                </tbody>
+              </table>
+              <div className="hidden print:block mt-8 border-t pt-4">
+                <h3 className="font-bold text-sm mb-2 uppercase">{t.legend}</h3>
+                <div className="grid grid-cols-6 gap-4 text-xs">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-4 h-4 border text-center font-bold"
+                      style={getShiftStyle("M")}
                     >
-                      <td className="p-2 border-b border-r font-bold text-gray-600 sticky left-0 bg-gray-50 z-10 shadow-sm print:static print:bg-transparent print:text-black print:border-black">
-                        {lng} Overflow
-                      </td>
-                      {calendarData.map((day) => {
-                        const isFocused = focusedDate === day.fullDate;
-                        const countM = filteredTeam.reduce((acc, emp) => {
-                          return (
-                            acc +
-                            (day.shifts[emp.id] === "M" &&
-                            emp.languages.includes(lng)
-                              ? 1
-                              : 0)
-                          );
-                        }, 0);
-                        const countT = filteredTeam.reduce((acc, emp) => {
-                          return (
-                            acc +
-                            (day.shifts[emp.id] === "T" &&
-                            emp.languages.includes(lng)
-                              ? 1
-                              : 0)
-                          );
-                        }, 0);
-                        const countN = filteredTeam.reduce((acc, emp) => {
-                          return (
-                            acc +
-                            (day.shifts[emp.id] === "N" &&
-                            emp.languages.includes(lng)
-                              ? 1
-                              : 0)
-                          );
-                        }, 0);
-
-                        const ovM = Math.max(0, countM - 1);
-                        const ovT = Math.max(0, countT - 1);
-                        const ovN = Math.max(0, countN - 1);
-
-                        return (
-                          <td
-                            key={day.fullDate}
-                            className={`border-b border-r p-1 text-center text-[10px] ${
-                              isFocused
-                                ? "bg-yellow-50 ring-2 ring-yellow-400 ring-inset"
-                                : ""
-                            } print:border-black`}
-                            title={`M:${countM} T:${countT} N:${countN}`}
-                          >
-                            <div className="flex items-center justify-center gap-1">
-                              <span
-                                className={`px-1.5 py-0.5 rounded border text-[10px] font-semibold ${
-                                  ovM > 0 ? "" : "opacity-60"
-                                }`}
-                                style={getShiftStyle("M")}
-                              >
-                                M:+{ovM}
-                              </span>
-                              <span
-                                className={`px-1.5 py-0.5 rounded border text-[10px] font-semibold ${
-                                  ovT > 0 ? "" : "opacity-60"
-                                }`}
-                                style={getShiftStyle("T")}
-                              >
-                                T:+{ovT}
-                              </span>
-                              <span
-                                className={`px-1.5 py-0.5 rounded border text-[10px] font-semibold ${
-                                  ovN > 0 ? "" : "opacity-60"
-                                }`}
-                                style={getShiftStyle("N")}
-                              >
-                                N:+{ovN}
-                              </span>
-                            </div>
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </>
-              )}
-            </tbody>
-          </table>
-          <div className="hidden print:block mt-8 border-t pt-4">
-            <h3 className="font-bold text-sm mb-2 uppercase">{t.legend}</h3>
-            <div className="grid grid-cols-6 gap-4 text-xs">
-              <div className="flex items-center gap-2">
-                <div
-                  className="w-4 h-4 border text-center font-bold"
-                  style={getShiftStyle("M")}
-                >
-                  M
+                      M
+                    </div>
+                    <span>
+                      {t.legM} ({legends.M})
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-4 h-4 border text-center font-bold"
+                      style={getShiftStyle("T")}
+                    >
+                      T
+                    </div>
+                    <span>
+                      {t.legT} ({legends.T})
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-4 h-4 border text-center font-bold"
+                      style={getShiftStyle("N")}
+                    >
+                      N
+                    </div>
+                    <span>
+                      {t.legN} ({legends.N})
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border bg-gray-100"></div>
+                    <span>{t.legF}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-4 h-4 border text-center font-bold"
+                      style={getShiftStyle("V")}
+                    >
+                      V
+                    </div>
+                    <span>{t.legV}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-4 h-4 border text-center font-bold"
+                      style={getShiftStyle("S")}
+                    >
+                      S
+                    </div>
+                    <span>{t.legS}</span>
+                  </div>
                 </div>
-                <span>
-                  {t.legM} ({legends.M})
-                </span>
               </div>
-              <div className="flex items-center gap-2">
-                <div
-                  className="w-4 h-4 border text-center font-bold"
-                  style={getShiftStyle("T")}
-                >
-                  T
-                </div>
-                <span>
-                  {t.legT} ({legends.T})
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div
-                  className="w-4 h-4 border text-center font-bold"
-                  style={getShiftStyle("N")}
-                >
-                  N
-                </div>
-                <span>
-                  {t.legN} ({legends.N})
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 border bg-gray-100"></div>
-                <span>{t.legF}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div
-                  className="w-4 h-4 border text-center font-bold"
-                  style={getShiftStyle("V")}
-                >
-                  V
-                </div>
-                <span>{t.legV}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div
-                  className="w-4 h-4 border text-center font-bold"
-                  style={getShiftStyle("S")}
-                >
-                  S
-                </div>
-                <span>{t.legS}</span>
-              </div>
+            </>
+          ) : (
+            <div className="p-6 text-center text-sm text-slate-500">
+              Calendar view is disabled for this role. Contact an admin for
+              access.
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

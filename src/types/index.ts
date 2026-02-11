@@ -9,6 +9,27 @@ export type LangCode = "en";
 export type SortOrder = "AZ" | "ZA" | "ROLE";
 export type RoleId = "viewer" | "editor" | "manager" | "admin";
 
+export type FeatureKey =
+  | "viewCalendar"
+  | "editSchedule"
+  | "bulkActions"
+  | "viewRequests"
+  | "publishSchedule"
+  | "exportCsv"
+  | "fileBackup"
+  | "viewStats"
+  | "viewAnnual"
+  | "configPanel"
+  | "viewCoverage";
+
+export type NonAdminRoleId = Exclude<RoleId, "admin">;
+
+export type RoleFeatureToggles = Record<FeatureKey, boolean>;
+
+export interface FeatureToggles {
+  roles: Record<NonAdminRoleId, RoleFeatureToggles>;
+}
+
 export interface RotationConfig {
   morningDays: number;
   afternoonDays: number;

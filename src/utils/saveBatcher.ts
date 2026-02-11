@@ -14,6 +14,8 @@
  * - Pending writes lost on page refresh: consider using IndexedDB for pending queue
  */
 
+import type { FeatureToggles } from "../types";
+
 interface SaveBatch {
   startDateStr?: string;
   holidays?: string[];
@@ -24,6 +26,7 @@ interface SaveBatch {
   colors?: Record<string, string>;
   config?: Record<string, any>;
   hoursConfig?: Record<string, number>;
+  featureToggles?: FeatureToggles;
   team?: any[];
   requests?: any[];
   overrides?: Record<string, string>;

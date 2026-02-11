@@ -1,4 +1,4 @@
-import type { Role, Language, Employee } from "../types";
+import type { Role, Language, Employee, FeatureToggles } from "../types";
 
 // --- FIREBASE CONFIGURATION ---
 // Configuration is loaded from environment variables (.env file)
@@ -46,6 +46,50 @@ export const ROLES: Record<string, Role> = {
     role: "admin",
     permissions: ["read", "write", "admin", "approve", "system"],
     description: "Administrative access to manage users and system settings.",
+  },
+};
+
+export const DEFAULT_FEATURE_TOGGLES: FeatureToggles = {
+  roles: {
+    viewer: {
+      viewCalendar: true,
+      editSchedule: false,
+      bulkActions: false,
+      viewRequests: false,
+      publishSchedule: false,
+      exportCsv: false,
+      fileBackup: false,
+      viewStats: true,
+      viewAnnual: true,
+      configPanel: false,
+      viewCoverage: false,
+    },
+    editor: {
+      viewCalendar: true,
+      editSchedule: true,
+      bulkActions: false,
+      viewRequests: false,
+      publishSchedule: false,
+      exportCsv: false,
+      fileBackup: false,
+      viewStats: true,
+      viewAnnual: true,
+      configPanel: false,
+      viewCoverage: true,
+    },
+    manager: {
+      viewCalendar: true,
+      editSchedule: true,
+      bulkActions: true,
+      viewRequests: true,
+      publishSchedule: true,
+      exportCsv: true,
+      fileBackup: true,
+      viewStats: true,
+      viewAnnual: true,
+      configPanel: true,
+      viewCoverage: true,
+    },
   },
 };
 
