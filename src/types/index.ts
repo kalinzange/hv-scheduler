@@ -20,7 +20,8 @@ export type FeatureKey =
   | "viewStats"
   | "viewAnnual"
   | "configPanel"
-  | "viewCoverage";
+  | "viewCoverage"
+  | "editorWorkingShifts";
 
 export type NonAdminRoleId = Exclude<RoleId, "admin">;
 

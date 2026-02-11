@@ -63,6 +63,7 @@ export const DEFAULT_FEATURE_TOGGLES: FeatureToggles = {
       viewAnnual: true,
       configPanel: false,
       viewCoverage: false,
+      editorWorkingShifts: false,
     },
     editor: {
       viewCalendar: true,
@@ -76,6 +77,7 @@ export const DEFAULT_FEATURE_TOGGLES: FeatureToggles = {
       viewAnnual: true,
       configPanel: false,
       viewCoverage: true,
+      editorWorkingShifts: false,
     },
     manager: {
       viewCalendar: true,
@@ -89,6 +91,7 @@ export const DEFAULT_FEATURE_TOGGLES: FeatureToggles = {
       viewAnnual: true,
       configPanel: true,
       viewCoverage: true,
+      editorWorkingShifts: true,
     },
   },
 };

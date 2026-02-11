@@ -17,6 +17,7 @@
  */
 
 import * as functions from "firebase-functions";
+import { admin } from "./admin";
 
 interface OverrideValidationRequest {
   empId: number;
@@ -25,6 +26,7 @@ interface OverrideValidationRequest {
   role: string;
   userId: string;
   overrides: Record<string, string>;
+  appId?: string;
 }
 
 interface ValidationResponse {
@@ -32,6 +34,45 @@ interface ValidationResponse {
   error?: string;
   warnings?: string[];
 }
+
+const ALLOWED_SHIFT_TYPES = ["M", "T", "N", "F", "V", "S"] as const;
+const EDITOR_SHIFT_TYPES = ["F", "V", "S"] as const;
+
+const getEditorAllowedShiftTypes = async (
+  appId?: string,
+): Promise<ReadonlySet<string>> => {
+  const configuredAppId =
+    appId || functions.config()?.app?.id || process.env.APP_ID;
+  if (!configuredAppId) {
+    return new Set(EDITOR_SHIFT_TYPES);
+  }
+
+  try {
+    const docRef = admin
+      .firestore()
+      .doc(
+        `artifacts/${configuredAppId}/public/data/shift_scheduler/global_state`,
+      );
+    const docSnap = await docRef.get();
+    if (!docSnap.exists) {
+      return new Set(EDITOR_SHIFT_TYPES);
+    }
+
+    const data = docSnap.data() as any;
+    const allowEditorWorkingShifts =
+      data?.featureToggles?.roles?.editor?.editorWorkingShifts === true;
+
+    return allowEditorWorkingShifts
+      ? new Set(ALLOWED_SHIFT_TYPES)
+      : new Set(EDITOR_SHIFT_TYPES);
+  } catch (error) {
+    functions.logger.warn(
+      "[validateOverride] Failed to load feature toggles; defaulting to editor restrictions",
+      error,
+    );
+    return new Set(EDITOR_SHIFT_TYPES);
+  }
+};
 
 const checkRestViolation = (prev: string, curr: string): boolean => {
   if (prev === "T" && curr === "M") return true;
@@ -42,7 +83,7 @@ const checkRestViolation = (prev: string, curr: string): boolean => {
 
 const checkShiftOverflow = (
   shifts: string[],
-  index: number
+  index: number,
 ): { hasOverflow: boolean; startIdx: number } => {
   let startIdx = index;
   while (startIdx > 0) {
@@ -96,12 +137,13 @@ export const validateOverride = functions.https.onRequest(
         shiftType,
         role,
         overrides: overridesData,
+        appId,
       } = request.body as OverrideValidationRequest;
 
       const result: ValidationResponse = { valid: true, warnings: [] };
 
-      // 1. AUTHORIZATION: Only manager/admin can override shifts
-      if (!["manager", "admin"].includes(role)) {
+      // 1. AUTHORIZATION: Only manager/admin/editor can submit overrides
+      if (!["manager", "admin", "editor"].includes(role)) {
         result.valid = false;
         result.error = `Role '${role}' not authorized to create overrides`;
         response.status(403).json(result);
@@ -116,6 +158,21 @@ export const validateOverride = functions.https.onRequest(
         return;
       }
 
+      if (!ALLOWED_SHIFT_TYPES.includes(shiftType as any)) {
+        result.valid = false;
+        result.error = `Invalid shift type '${shiftType}'`;
+        response.status(400).json(result);
+        return;
+      }
+
+      const allowedEditorShiftTypes = await getEditorAllowedShiftTypes(appId);
+      if (role === "editor" && !allowedEditorShiftTypes.has(shiftType as any)) {
+        result.valid = false;
+        result.error = `Role '${role}' cannot request shift '${shiftType}'`;
+        response.status(403).json(result);
+        return;
+      }
+
       // 3. BUSINESS LOGIC VALIDATION
 
       // Check rest violations (cannot work T→M, N→M, N→T consecutively)
@@ -123,7 +180,7 @@ export const validateOverride = functions.https.onRequest(
       const prevDate = new Date(dateObj);
       prevDate.setDate(prevDate.getDate() - 1);
       const prevDateKey = `${prevDate.getFullYear()}-${String(
-        prevDate.getMonth() + 1
+        prevDate.getMonth() + 1,
       ).padStart(2, "0")}-${String(prevDate.getDate()).padStart(2, "0")}`;
 
       const prevShift = overridesData[`${empId}_${prevDateKey}`] || "F";
@@ -158,11 +215,11 @@ export const validateOverride = functions.https.onRequest(
       // 4. WARNINGS (validation passes but alert user)
       if (shiftType === "V") {
         const vacationDays = Object.values(overridesData).filter(
-          (s) => s === "V"
+          (s) => s === "V",
         ).length;
         if (vacationDays > 20) {
           result.warnings?.push(
-            `Employee has ${vacationDays} vacation days already`
+            `Employee has ${vacationDays} vacation days already`,
           );
         }
       }
@@ -176,7 +233,7 @@ export const validateOverride = functions.https.onRequest(
         error: "Internal server error during validation",
       });
     }
-  }
+  },
 );
 
 /**
@@ -196,13 +253,37 @@ export const validateOverrideBatch = functions.https.onCall(
     role: string;
     userId: string;
     allOverrides: Record<string, string>;
+    appId?: string;
   }) => {
     // Verify role
-    if (!["manager", "admin"].includes(data.role)) {
+    if (!["manager", "admin", "editor"].includes(data.role)) {
       throw new functions.https.HttpsError(
         "permission-denied",
-        `Role '${data.role}' not authorized`
+        `Role '${data.role}' not authorized`,
       );
+    }
+
+    const allowedEditorShiftTypes = await getEditorAllowedShiftTypes(
+      data.appId,
+    );
+
+    for (const override of data.overrides) {
+      if (!ALLOWED_SHIFT_TYPES.includes(override.shiftType as any)) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          `Invalid shift type '${override.shiftType}'`,
+        );
+      }
+
+      if (
+        data.role === "editor" &&
+        !allowedEditorShiftTypes.has(override.shiftType as any)
+      ) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          `Role '${data.role}' cannot request shift '${override.shiftType}'`,
+        );
+      }
     }
 
     const results = [];
@@ -214,7 +295,7 @@ export const validateOverrideBatch = functions.https.onCall(
       const prevDate = new Date(override.dateKey);
       prevDate.setDate(prevDate.getDate() - 1);
       const prevDateKey = `${prevDate.getFullYear()}-${String(
-        prevDate.getMonth() + 1
+        prevDate.getMonth() + 1,
       ).padStart(2, "0")}-${String(prevDate.getDate()).padStart(2, "0")}`;
 
       const prevShift =
@@ -228,5 +309,5 @@ export const validateOverrideBatch = functions.https.onCall(
     }
 
     return { results };
-  }
+  },
 );

@@ -226,6 +226,7 @@ const BulkActionModal = ({
   team,
   currentUser,
   preSelectedId,
+  allowEditorWorkingShifts,
 }: any) => {
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
@@ -259,6 +260,8 @@ const BulkActionModal = ({
   };
 
   const isManager = currentUser.role === "manager";
+  const isEditor = currentUser.role === "editor";
+  const canUseWorkingShifts = !isEditor || allowEditorWorkingShifts;
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
@@ -327,19 +330,30 @@ const BulkActionModal = ({
               {t.shiftType}
             </label>
             <div className="grid grid-cols-4 gap-2">
-              {["M", "T", "N", "F"].map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setShiftType(s as any)}
-                  className={`p-2 rounded border text-sm font-bold ${
-                    shiftType === s
-                      ? "bg-indigo-100 border-indigo-500 text-indigo-800"
-                      : "bg-white text-gray-600 hover:bg-gray-50"
-                  }`}
-                >
-                  {s}
-                </button>
-              ))}
+              {canUseWorkingShifts &&
+                ["M", "T", "N"].map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setShiftType(s as any)}
+                    className={`p-2 rounded border text-sm font-bold ${
+                      shiftType === s
+                        ? "bg-indigo-100 border-indigo-500 text-indigo-800"
+                        : "bg-white text-gray-600 hover:bg-gray-50"
+                    }`}
+                  >
+                    {s}
+                  </button>
+                ))}
+              <button
+                onClick={() => setShiftType("F")}
+                className={`p-2 rounded border text-sm font-bold ${
+                  shiftType === "F"
+                    ? "bg-indigo-100 border-indigo-500 text-indigo-800"
+                    : "bg-white text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                F
+              </button>
               <button
                 onClick={() => setShiftType("V")}
                 className={`p-2 rounded border text-sm font-bold ${
@@ -504,9 +518,11 @@ const CellEditor = ({
   onUpdate,
   legends,
   customColors,
+  currentUserRole,
+  allowEditorWorkingShifts,
 }: any) => {
   // Build options dynamically from standard shifts and custom shifts
-  const options: {
+  const allOptions: {
     id: OverrideType | "CLEAR";
     label: string;
     icon?: any;
@@ -530,6 +546,11 @@ const CellEditor = ({
       color: customColors.S,
     },
   ];
+  const isEditor = currentUserRole === "editor";
+  const options =
+    isEditor && !allowEditorWorkingShifts
+      ? allOptions.filter((opt) => ["F", "V", "S"].includes(opt.id))
+      : allOptions;
 
   // Lógica de deteção de fundo de ecrã
   // Se estiver nos últimos 350px do ecrã, abre para cima
@@ -1194,6 +1215,10 @@ const ShiftScheduler = () => {
     !isAdmin && canManage && isFeatureEnabled("fileBackup", currentUser.role);
   const canViewCoverage =
     !isAdmin && canWrite && isFeatureEnabled("viewCoverage", currentUser.role);
+  const allowEditorWorkingShifts = isFeatureEnabled(
+    "editorWorkingShifts",
+    currentUser.role,
+  );
 
   // Update refs whenever these values change so snapshot listener always has current values
   canWriteRef.current = canWrite;
@@ -2367,6 +2392,9 @@ const ShiftScheduler = () => {
       return;
     }
 
+    const disallowedShiftSet = new Set(["M", "T", "N"]);
+    let disallowedCount = 0;
+
     const empName =
       teamState.find((e) => e.id === loggedInUserId)?.name || "Unknown";
     const newRequests: ShiftRequest[] = [];
@@ -2374,6 +2402,16 @@ const ShiftScheduler = () => {
     Object.entries(pendingSelections).forEach(([key, value]) => {
       const [empIdStr, dateStr] = key.split("_");
       const empId = parseInt(empIdStr);
+
+      if (
+        currentUser.role === "editor" &&
+        !allowEditorWorkingShifts &&
+        value &&
+        disallowedShiftSet.has(value)
+      ) {
+        disallowedCount++;
+        return;
+      }
 
       if (empId === loggedInUserId) {
         newRequests.push({
@@ -2396,7 +2434,24 @@ const ShiftScheduler = () => {
         "success",
       );
     }
-  }, [pendingSelections, loggedInUserId, teamState, t, showToast, canWrite]);
+
+    if (disallowedCount > 0) {
+      showToast(
+        t.invalidShiftSelection ||
+          "Some selections were skipped because editors cannot request working shifts.",
+        "error",
+      );
+    }
+  }, [
+    pendingSelections,
+    loggedInUserId,
+    teamState,
+    t,
+    showToast,
+    canWrite,
+    currentUser.role,
+    allowEditorWorkingShifts,
+  ]);
 
   const handleUndo = () => {
     if (undoHistory.length === 0) return;
@@ -3363,6 +3418,7 @@ const ShiftScheduler = () => {
           team={teamState}
           currentUser={currentUser}
           preSelectedId={preSelectedBulkId}
+          allowEditorWorkingShifts={allowEditorWorkingShifts}
           onApply={handleBulkApply}
         />
       )}
@@ -3397,6 +3453,8 @@ const ShiftScheduler = () => {
           onUpdate={handleOverride}
           legends={legends}
           customColors={colors}
+          currentUserRole={currentUser.role}
+          allowEditorWorkingShifts={allowEditorWorkingShifts}
         />
       )}
 

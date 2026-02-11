@@ -19,6 +19,11 @@ const FEATURE_CATALOG: Array<{
     description: "Show the schedule grid and navigation tools.",
   },
   {
+    key: "editorWorkingShifts",
+    label: "Editor Working Shifts",
+    description: "Allow editors to select M/T/N shifts (otherwise only F/V/S).",
+  },
+  {
     key: "editSchedule",
     label: "Edit Schedule",
     description: "Allow shift edits and draft changes.",
@@ -162,6 +167,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             checked={featureToggles.roles[role][feature.key]}
                             onChange={() => onToggleFeature(role, feature.key)}
                             className="rounded w-4 h-4"
+                            disabled={
+                              feature.key === "editorWorkingShifts" &&
+                              role !== "editor"
+                            }
                           />
                           <span className="text-[11px] text-slate-500">
                             {featureToggles.roles[role][feature.key]
