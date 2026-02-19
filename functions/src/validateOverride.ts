@@ -36,15 +36,24 @@ interface ValidationResponse {
 }
 
 const ALLOWED_SHIFT_TYPES = ["M", "T", "N", "F", "V", "S"] as const;
-const EDITOR_SHIFT_TYPES = ["F", "V", "S"] as const;
+const DEFAULT_ROLE_SHIFT_OPTIONS: Record<string, string[]> = {
+  viewer: ["F", "V", "S"],
+  editor: ["F", "V", "S"],
+  manager: ["M", "T", "N", "F", "V", "S"],
+};
 
-const getEditorAllowedShiftTypes = async (
+const getAllowedShiftTypesForRole = async (
+  role: string,
   appId?: string,
 ): Promise<ReadonlySet<string>> => {
+  if (role === "admin") {
+    return new Set(ALLOWED_SHIFT_TYPES);
+  }
+
   const configuredAppId =
     appId || functions.config()?.app?.id || process.env.APP_ID;
   if (!configuredAppId) {
-    return new Set(EDITOR_SHIFT_TYPES);
+    return new Set(DEFAULT_ROLE_SHIFT_OPTIONS[role] || ALLOWED_SHIFT_TYPES);
   }
 
   try {
@@ -55,22 +64,36 @@ const getEditorAllowedShiftTypes = async (
       );
     const docSnap = await docRef.get();
     if (!docSnap.exists) {
-      return new Set(EDITOR_SHIFT_TYPES);
+      return new Set(DEFAULT_ROLE_SHIFT_OPTIONS[role] || ALLOWED_SHIFT_TYPES);
     }
 
     const data = docSnap.data() as any;
-    const allowEditorWorkingShifts =
-      data?.featureToggles?.roles?.editor?.editorWorkingShifts === true;
+    const shiftOptionsByRole = data?.shiftOptionsByRole as
+      | Record<string, string[]>
+      | undefined;
+    const rawOptions = Array.isArray(shiftOptionsByRole?.[role])
+      ? shiftOptionsByRole?.[role]
+      : undefined;
 
-    return allowEditorWorkingShifts
-      ? new Set(ALLOWED_SHIFT_TYPES)
-      : new Set(EDITOR_SHIFT_TYPES);
+    if (!rawOptions) {
+      return new Set(DEFAULT_ROLE_SHIFT_OPTIONS[role] || ALLOWED_SHIFT_TYPES);
+    }
+
+    const normalized = rawOptions.filter((option) =>
+      ALLOWED_SHIFT_TYPES.includes(option as any),
+    );
+
+    return new Set(
+      normalized.length > 0
+        ? normalized
+        : DEFAULT_ROLE_SHIFT_OPTIONS[role] || ALLOWED_SHIFT_TYPES,
+    );
   } catch (error) {
     functions.logger.warn(
-      "[validateOverride] Failed to load feature toggles; defaulting to editor restrictions",
+      "[validateOverride] Failed to load shift options; defaulting to role defaults",
       error,
     );
-    return new Set(EDITOR_SHIFT_TYPES);
+    return new Set(DEFAULT_ROLE_SHIFT_OPTIONS[role] || ALLOWED_SHIFT_TYPES);
   }
 };
 
@@ -165,8 +188,8 @@ export const validateOverride = functions.https.onRequest(
         return;
       }
 
-      const allowedEditorShiftTypes = await getEditorAllowedShiftTypes(appId);
-      if (role === "editor" && !allowedEditorShiftTypes.has(shiftType as any)) {
+      const allowedShiftTypes = await getAllowedShiftTypesForRole(role, appId);
+      if (!allowedShiftTypes.has(shiftType as any)) {
         result.valid = false;
         result.error = `Role '${role}' cannot request shift '${shiftType}'`;
         response.status(403).json(result);
@@ -263,7 +286,8 @@ export const validateOverrideBatch = functions.https.onCall(
       );
     }
 
-    const allowedEditorShiftTypes = await getEditorAllowedShiftTypes(
+    const allowedShiftTypes = await getAllowedShiftTypesForRole(
+      data.role,
       data.appId,
     );
 
@@ -275,10 +299,7 @@ export const validateOverrideBatch = functions.https.onCall(
         );
       }
 
-      if (
-        data.role === "editor" &&
-        !allowedEditorShiftTypes.has(override.shiftType as any)
-      ) {
+      if (!allowedShiftTypes.has(override.shiftType as any)) {
         throw new functions.https.HttpsError(
           "permission-denied",
           `Role '${data.role}' cannot request shift '${override.shiftType}'`,

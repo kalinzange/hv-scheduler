@@ -14,7 +14,7 @@
  * - Pending writes lost on page refresh: consider using IndexedDB for pending queue
  */
 
-import type { FeatureToggles } from "../types";
+import type { FeatureToggles, ShiftOptionsByRole } from "../types";
 
 interface SaveBatch {
   startDateStr?: string;
@@ -27,6 +27,7 @@ interface SaveBatch {
   config?: Record<string, any>;
   hoursConfig?: Record<string, number>;
   featureToggles?: FeatureToggles;
+  shiftOptionsByRole?: ShiftOptionsByRole;
   team?: any[];
   requests?: any[];
   overrides?: Record<string, string>;
@@ -67,7 +68,7 @@ class SaveBatcher {
    * Add changes to the batch queue
    * Automatically triggers write when batch is full or timeout reached
    */
-  addChanges(changes: SaveBatch): void {
+  addChanges(changes: SaveBatch | Record<string, unknown>): void {
     // Filter out undefined values (editors don't save all fields)
     const filteredChanges: Partial<SaveBatch> = {};
     for (const [key, value] of Object.entries(changes)) {

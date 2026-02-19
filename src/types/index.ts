@@ -20,8 +20,7 @@ export type FeatureKey =
   | "viewStats"
   | "viewAnnual"
   | "configPanel"
-  | "viewCoverage"
-  | "editorWorkingShifts";
+  | "viewCoverage";
 
 export type NonAdminRoleId = Exclude<RoleId, "admin">;
 
@@ -30,6 +29,8 @@ export type RoleFeatureToggles = Record<FeatureKey, boolean>;
 export interface FeatureToggles {
   roles: Record<NonAdminRoleId, RoleFeatureToggles>;
 }
+
+export type ShiftOptionsByRole = Record<NonAdminRoleId, OverrideType[]>;
 
 export interface RotationConfig {
   morningDays: number;

@@ -1,6 +1,12 @@
-import React from "react";
-import { Shield, Users } from "lucide-react";
-import type { FeatureKey, FeatureToggles, NonAdminRoleId } from "../types";
+import React, { useState } from "react";
+import { Shield, Users, Settings2, X } from "lucide-react";
+import type {
+  FeatureKey,
+  FeatureToggles,
+  NonAdminRoleId,
+  OverrideType,
+  ShiftOptionsByRole,
+} from "../types";
 
 const ROLE_LABELS: Record<NonAdminRoleId, string> = {
   viewer: "Reader",
@@ -17,11 +23,6 @@ const FEATURE_CATALOG: Array<{
     key: "viewCalendar",
     label: "Calendar View",
     description: "Show the schedule grid and navigation tools.",
-  },
-  {
-    key: "editorWorkingShifts",
-    label: "Editor Working Shifts",
-    description: "Allow editors to select M/T/N shifts (otherwise only F/V/S).",
   },
   {
     key: "editSchedule",
@@ -75,9 +76,20 @@ const FEATURE_CATALOG: Array<{
   },
 ];
 
+const EDITOR_SHIFT_OPTIONS: Array<{ id: OverrideType; label: string }> = [
+  { id: "M", label: "Morning (M)" },
+  { id: "T", label: "Afternoon (T)" },
+  { id: "N", label: "Night (N)" },
+  { id: "F", label: "Day Off (F)" },
+  { id: "V", label: "Vacation (V)" },
+  { id: "S", label: "Sick Leave (S)" },
+];
+
 interface AdminDashboardProps {
   featureToggles: FeatureToggles;
   onToggleFeature: (role: NonAdminRoleId, feature: FeatureKey) => void;
+  shiftOptionsByRole: ShiftOptionsByRole;
+  onUpdateShiftOptionsByRole: (options: ShiftOptionsByRole) => void;
   onOpenAdminPanel: () => void;
   teamCount: number;
 }
@@ -85,9 +97,36 @@ interface AdminDashboardProps {
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   featureToggles,
   onToggleFeature,
+  shiftOptionsByRole,
+  onUpdateShiftOptionsByRole,
   onOpenAdminPanel,
   teamCount,
 }) => {
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const [activeRole, setActiveRole] = useState<NonAdminRoleId>("editor");
+
+  const visibleFeatures = FEATURE_CATALOG.filter(
+    (feature) => feature.key !== "viewRequests",
+  );
+
+  const isFeatureDisabled = (role: NonAdminRoleId, _feature: FeatureKey) => {
+    return false;
+  };
+
+  const toggleRoleShiftOption = (
+    role: NonAdminRoleId,
+    option: OverrideType,
+  ) => {
+    const current = shiftOptionsByRole[role] || [];
+    const next = current.includes(option)
+      ? current.filter((item) => item !== option)
+      : [...current, option];
+    onUpdateShiftOptionsByRole({
+      ...shiftOptionsByRole,
+      [role]: next,
+    });
+  };
+
   return (
     <div className="p-4 md:p-6 space-y-6">
       <div className="rounded-xl border bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-6 shadow-lg">
@@ -132,65 +171,142 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </div>
 
       <div className="rounded-xl border bg-white p-4 shadow-sm">
-        <h3 className="text-sm font-bold text-slate-700 mb-3">
-          Feature Controls by Role
-        </h3>
-        <div className="overflow-x-auto">
-          <table className="min-w-[700px] w-full text-xs">
-            <thead>
-              <tr className="text-left text-slate-500">
-                <th className="py-2 pr-4">Feature</th>
-                {Object.keys(ROLE_LABELS).map((role) => (
-                  <th key={role} className="py-2 pr-4">
-                    {ROLE_LABELS[role as NonAdminRoleId]}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {FEATURE_CATALOG.map((feature) => (
-                <tr key={feature.key} className="border-t">
-                  <td className="py-3 pr-4">
-                    <div className="font-semibold text-slate-700">
-                      {feature.label}
-                    </div>
-                    <div className="text-[11px] text-slate-400">
-                      {feature.description}
-                    </div>
-                  </td>
-                  {(Object.keys(ROLE_LABELS) as NonAdminRoleId[]).map(
-                    (role) => (
-                      <td key={role} className="py-3 pr-4">
-                        <label className="inline-flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={featureToggles.roles[role][feature.key]}
-                            onChange={() => onToggleFeature(role, feature.key)}
-                            className="rounded w-4 h-4"
-                            disabled={
-                              feature.key === "editorWorkingShifts" &&
-                              role !== "editor"
-                            }
-                          />
-                          <span className="text-[11px] text-slate-500">
-                            {featureToggles.roles[role][feature.key]
-                              ? "Enabled"
-                              : "Disabled"}
-                          </span>
-                        </label>
-                      </td>
-                    ),
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h3 className="text-sm font-bold text-slate-700">
+              Role Visibility Controls
+            </h3>
+            <p className="text-xs text-slate-500">
+              Configure which options appear for each access mode.
+            </p>
+          </div>
+          <button
+            onClick={() => setOptionsOpen(true)}
+            className="flex items-center gap-2 px-3 py-2 border rounded-md text-sm hover:bg-slate-50"
+          >
+            <Settings2 size={14} /> Configure
+          </button>
         </div>
         <div className="text-[11px] text-slate-500 mt-3">
-          Feature toggles are client-side controls. Enforce critical policies in
-          Firebase rules and backend services.
+          Changes apply immediately and affect the UI for each role.
         </div>
       </div>
+
+      {optionsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl">
+            <div className="flex items-center justify-between border-b px-5 py-3">
+              <div>
+                <h4 className="text-sm font-bold text-slate-700">
+                  Role Visibility Settings
+                </h4>
+                <p className="text-xs text-slate-500">
+                  Toggle exactly which options are visible per role.
+                </p>
+              </div>
+              <button
+                onClick={() => setOptionsOpen(false)}
+                className="p-2 rounded hover:bg-slate-100"
+                aria-label="Close"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="px-5 py-4 space-y-4">
+              <div className="flex flex-wrap gap-2">
+                {(Object.keys(ROLE_LABELS) as NonAdminRoleId[]).map((role) => (
+                  <button
+                    key={role}
+                    onClick={() => setActiveRole(role)}
+                    className={`px-3 py-1.5 text-xs rounded-full border transition ${
+                      activeRole === role
+                        ? "bg-slate-900 text-white border-slate-900"
+                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    {ROLE_LABELS[role]}
+                  </button>
+                ))}
+              </div>
+
+              <div className="rounded-lg border bg-slate-50 p-3">
+                <div className="text-xs font-semibold text-slate-700">
+                  Shift Options for {ROLE_LABELS[activeRole]}
+                </div>
+                <div className="text-[11px] text-slate-500 mb-2">
+                  Select which shift options are visible for this role.
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {EDITOR_SHIFT_OPTIONS.map((option) => (
+                    <label
+                      key={option.id}
+                      className="inline-flex items-center gap-2 text-xs text-slate-600"
+                    >
+                      <input
+                        type="checkbox"
+                        className="rounded w-4 h-4"
+                        checked={(
+                          shiftOptionsByRole[activeRole] || []
+                        ).includes(option.id)}
+                        onChange={() =>
+                          toggleRoleShiftOption(activeRole, option.id)
+                        }
+                      />
+                      {option.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {visibleFeatures.map((feature) => {
+                  const disabled = isFeatureDisabled(activeRole, feature.key);
+                  return (
+                    <label
+                      key={feature.key}
+                      className={`border rounded-lg p-3 flex items-start gap-3 ${
+                        disabled ? "bg-slate-50 text-slate-300" : "bg-white"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-1 rounded w-4 h-4"
+                        checked={featureToggles.roles[activeRole][feature.key]}
+                        onChange={() =>
+                          onToggleFeature(activeRole, feature.key)
+                        }
+                        disabled={disabled}
+                      />
+                      <div>
+                        <div className="text-xs font-semibold text-slate-700">
+                          {feature.label}
+                        </div>
+                        <div className="text-[11px] text-slate-400">
+                          {feature.description}
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between border-t px-5 py-3">
+              <div className="text-[11px] text-slate-500">
+                Feature visibility affects the UI. Enforce critical policies in
+                backend services.
+              </div>
+              <button
+                onClick={() => setOptionsOpen(false)}
+                className="px-3 py-1.5 text-xs border rounded-md hover:bg-slate-50"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

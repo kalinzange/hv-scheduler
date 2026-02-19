@@ -1,4 +1,11 @@
-import type { Role, Language, Employee, FeatureToggles } from "../types";
+import type {
+  Role,
+  Language,
+  Employee,
+  FeatureToggles,
+  OverrideType,
+  ShiftOptionsByRole,
+} from "../types";
 
 // --- FIREBASE CONFIGURATION ---
 // Configuration is loaded from environment variables (.env file)
@@ -63,7 +70,6 @@ export const DEFAULT_FEATURE_TOGGLES: FeatureToggles = {
       viewAnnual: true,
       configPanel: false,
       viewCoverage: false,
-      editorWorkingShifts: false,
     },
     editor: {
       viewCalendar: true,
@@ -77,7 +83,6 @@ export const DEFAULT_FEATURE_TOGGLES: FeatureToggles = {
       viewAnnual: true,
       configPanel: false,
       viewCoverage: true,
-      editorWorkingShifts: false,
     },
     manager: {
       viewCalendar: true,
@@ -91,9 +96,14 @@ export const DEFAULT_FEATURE_TOGGLES: FeatureToggles = {
       viewAnnual: true,
       configPanel: true,
       viewCoverage: true,
-      editorWorkingShifts: true,
     },
   },
+};
+
+export const DEFAULT_SHIFT_OPTIONS_BY_ROLE: ShiftOptionsByRole = {
+  viewer: ["F", "V", "S"],
+  editor: ["F", "V", "S"],
+  manager: ["M", "T", "N", "F", "V", "S"],
 };
 
 // --- CONSTANTS ---

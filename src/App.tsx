@@ -78,6 +78,7 @@ import type {
   FeatureKey,
   FeatureToggles,
   NonAdminRoleId,
+  ShiftOptionsByRole,
 } from "./types";
 import {
   FIREBASE_CONFIG,
@@ -89,6 +90,7 @@ import {
   DEFAULT_HOLIDAYS,
   INITIAL_TEAM,
   DEFAULT_FEATURE_TOGGLES,
+  DEFAULT_SHIFT_OPTIONS_BY_ROLE,
 } from "./config/constants";
 import { TRANSLATIONS } from "./utils/translations";
 import { saveBatcher } from "./utils/saveBatcher";
@@ -226,7 +228,7 @@ const BulkActionModal = ({
   team,
   currentUser,
   preSelectedId,
-  allowEditorWorkingShifts,
+  shiftOptionsByRole,
 }: any) => {
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
@@ -261,7 +263,22 @@ const BulkActionModal = ({
 
   const isManager = currentUser.role === "manager";
   const isEditor = currentUser.role === "editor";
-  const canUseWorkingShifts = !isEditor || allowEditorWorkingShifts;
+  const allShiftOptions: OverrideType[] = ["M", "T", "N", "F", "V", "S"];
+  const roleKey = currentUser.role as NonAdminRoleId;
+  const allowedShiftOptions: OverrideType[] =
+    currentUser.role === "admin"
+      ? allShiftOptions
+      : (shiftOptionsByRole?.[roleKey] as OverrideType[]) || allShiftOptions;
+  const allowedShiftSet = new Set(allowedShiftOptions);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!isEditor) return;
+    const allowedSet = new Set(allowedShiftOptions);
+    if (allowedSet.has(shiftType as OverrideType)) return;
+    const fallback = allowedShiftOptions[0] || "CLEAR";
+    setShiftType(fallback as OverrideType);
+  }, [isOpen, isEditor, shiftType, allowedShiftOptions]);
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
@@ -330,50 +347,78 @@ const BulkActionModal = ({
               {t.shiftType}
             </label>
             <div className="grid grid-cols-4 gap-2">
-              {canUseWorkingShifts &&
-                ["M", "T", "N"].map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => setShiftType(s as any)}
-                    className={`p-2 rounded border text-sm font-bold ${
-                      shiftType === s
-                        ? "bg-indigo-100 border-indigo-500 text-indigo-800"
-                        : "bg-white text-gray-600 hover:bg-gray-50"
-                    }`}
-                  >
-                    {s}
-                  </button>
-                ))}
-              <button
-                onClick={() => setShiftType("F")}
-                className={`p-2 rounded border text-sm font-bold ${
-                  shiftType === "F"
-                    ? "bg-indigo-100 border-indigo-500 text-indigo-800"
-                    : "bg-white text-gray-600 hover:bg-gray-50"
-                }`}
-              >
-                F
-              </button>
-              <button
-                onClick={() => setShiftType("V")}
-                className={`p-2 rounded border text-sm font-bold ${
-                  shiftType === "V"
-                    ? "bg-pink-100 border-pink-500 text-pink-800"
-                    : "bg-white text-gray-600 hover:bg-gray-50"
-                }`}
-              >
-                Vac
-              </button>
-              <button
-                onClick={() => setShiftType("S")}
-                className={`p-2 rounded border text-sm font-bold ${
-                  shiftType === "S"
-                    ? "bg-gray-200 border-gray-500 text-gray-800"
-                    : "bg-white text-gray-600 hover:bg-gray-50"
-                }`}
-              >
-                Sick
-              </button>
+              {allowedShiftSet.has("M") && (
+                <button
+                  onClick={() => setShiftType("M")}
+                  className={`p-2 rounded border text-sm font-bold ${
+                    shiftType === "M"
+                      ? "bg-indigo-100 border-indigo-500 text-indigo-800"
+                      : "bg-white text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  M
+                </button>
+              )}
+              {allowedShiftSet.has("T") && (
+                <button
+                  onClick={() => setShiftType("T")}
+                  className={`p-2 rounded border text-sm font-bold ${
+                    shiftType === "T"
+                      ? "bg-indigo-100 border-indigo-500 text-indigo-800"
+                      : "bg-white text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  T
+                </button>
+              )}
+              {allowedShiftSet.has("N") && (
+                <button
+                  onClick={() => setShiftType("N")}
+                  className={`p-2 rounded border text-sm font-bold ${
+                    shiftType === "N"
+                      ? "bg-indigo-100 border-indigo-500 text-indigo-800"
+                      : "bg-white text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  N
+                </button>
+              )}
+              {allowedShiftSet.has("F") && (
+                <button
+                  onClick={() => setShiftType("F")}
+                  className={`p-2 rounded border text-sm font-bold ${
+                    shiftType === "F"
+                      ? "bg-indigo-100 border-indigo-500 text-indigo-800"
+                      : "bg-white text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  F
+                </button>
+              )}
+              {allowedShiftSet.has("V") && (
+                <button
+                  onClick={() => setShiftType("V")}
+                  className={`p-2 rounded border text-sm font-bold ${
+                    shiftType === "V"
+                      ? "bg-pink-100 border-pink-500 text-pink-800"
+                      : "bg-white text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  Vac
+                </button>
+              )}
+              {allowedShiftSet.has("S") && (
+                <button
+                  onClick={() => setShiftType("S")}
+                  className={`p-2 rounded border text-sm font-bold ${
+                    shiftType === "S"
+                      ? "bg-gray-200 border-gray-500 text-gray-800"
+                      : "bg-white text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  Sick
+                </button>
+              )}
               <button
                 onClick={() => setShiftType("CLEAR")}
                 className={`col-span-2 p-2 rounded border text-sm font-bold flex items-center justify-center gap-1 ${
@@ -519,7 +564,7 @@ const CellEditor = ({
   legends,
   customColors,
   currentUserRole,
-  allowEditorWorkingShifts,
+  shiftOptionsByRole,
 }: any) => {
   // Build options dynamically from standard shifts and custom shifts
   const allOptions: {
@@ -546,11 +591,15 @@ const CellEditor = ({
       color: customColors.S,
     },
   ];
-  const isEditor = currentUserRole === "editor";
-  const options =
-    isEditor && !allowEditorWorkingShifts
-      ? allOptions.filter((opt) => ["F", "V", "S"].includes(opt.id))
-      : allOptions;
+  const roleKey = currentUserRole as NonAdminRoleId;
+  const allowedShiftOptions: OverrideType[] =
+    currentUserRole === "admin"
+      ? (["M", "T", "N", "F", "V", "S"] as OverrideType[])
+      : (shiftOptionsByRole?.[roleKey] as OverrideType[]) ||
+        (["M", "T", "N", "F", "V", "S"] as OverrideType[]);
+  const options = allOptions.filter((opt) =>
+    allowedShiftOptions.includes(opt.id as OverrideType),
+  );
 
   // Lógica de deteção de fundo de ecrã
   // Se estiver nos últimos 350px do ecrã, abre para cima
@@ -1137,6 +1186,8 @@ const ShiftScheduler = () => {
   const [featureToggles, setFeatureToggles] = useState<FeatureToggles>(
     DEFAULT_FEATURE_TOGGLES,
   );
+  const [shiftOptionsByRole, setShiftOptionsByRole] =
+    useState<ShiftOptionsByRole>(DEFAULT_SHIFT_OPTIONS_BY_ROLE);
 
   // Ref to prevent infinite loops between Firebase sync and local save
   const isRemoteUpdate = useRef(false);
@@ -1181,6 +1232,35 @@ const ShiftScheduler = () => {
     };
   };
 
+  const normalizeShiftOptionsByRole = (
+    incoming?: unknown,
+  ): ShiftOptionsByRole => {
+    const allowed = new Set(["M", "T", "N", "F", "V", "S"]);
+    const roles: NonAdminRoleId[] = ["viewer", "editor", "manager"];
+    const defaults = DEFAULT_SHIFT_OPTIONS_BY_ROLE;
+
+    if (!incoming || typeof incoming !== "object") {
+      return defaults;
+    }
+
+    const raw = incoming as Record<string, unknown>;
+    const normalized: ShiftOptionsByRole = { ...defaults };
+
+    roles.forEach((role) => {
+      const list = raw[role];
+      if (!Array.isArray(list)) return;
+      const unique: OverrideType[] = [];
+      list.forEach((item) => {
+        if (allowed.has(item) && !unique.includes(item as OverrideType)) {
+          unique.push(item as OverrideType);
+        }
+      });
+      normalized[role] = unique;
+    });
+
+    return normalized;
+  };
+
   const isFeatureEnabled = useCallback(
     (feature: FeatureKey, role: RoleId) => {
       if (role === "admin") return true;
@@ -1215,10 +1295,6 @@ const ShiftScheduler = () => {
     !isAdmin && canManage && isFeatureEnabled("fileBackup", currentUser.role);
   const canViewCoverage =
     !isAdmin && canWrite && isFeatureEnabled("viewCoverage", currentUser.role);
-  const allowEditorWorkingShifts = isFeatureEnabled(
-    "editorWorkingShifts",
-    currentUser.role,
-  );
 
   // Update refs whenever these values change so snapshot listener always has current values
   canWriteRef.current = canWrite;
@@ -1462,6 +1538,10 @@ const ShiftScheduler = () => {
               if (data.hoursConfig) setHoursConfig(data.hoursConfig);
               if (data.featureToggles)
                 setFeatureToggles(normalizeFeatureToggles(data.featureToggles));
+              if (data.shiftOptionsByRole)
+                setShiftOptionsByRole(
+                  normalizeShiftOptionsByRole(data.shiftOptionsByRole),
+                );
 
               updateLoadingPhase("Loading team data...");
               if (data.team) setTeamState(data.team);
@@ -1807,6 +1887,7 @@ const ShiftScheduler = () => {
       config: isEditor ? undefined : config,
       hoursConfig: isEditor ? undefined : hoursConfig,
       featureToggles: isEditor ? undefined : featureToggles,
+      shiftOptionsByRole: isEditor ? undefined : shiftOptionsByRole,
       team: isEditor ? undefined : teamState, // Editors cannot save team data
       requests,
     });
@@ -1822,6 +1903,7 @@ const ShiftScheduler = () => {
     config,
     hoursConfig,
     featureToggles,
+    shiftOptionsByRole,
     teamState,
     requests,
     isLoading,
@@ -1909,6 +1991,7 @@ const ShiftScheduler = () => {
           config,
           hoursConfig,
           featureToggles,
+          shiftOptionsByRole,
           team: teamState,
           requests,
           lastUpdated: Date.now(),
@@ -2130,6 +2213,7 @@ const ShiftScheduler = () => {
         config,
         hoursConfig,
         featureToggles,
+        shiftOptionsByRole,
         team: teamState,
         requests,
       },
@@ -2195,6 +2279,10 @@ const ShiftScheduler = () => {
           if (s.hoursConfig) setHoursConfig(s.hoursConfig);
           if (s.featureToggles)
             setFeatureToggles(normalizeFeatureToggles(s.featureToggles));
+          if (s.shiftOptionsByRole)
+            setShiftOptionsByRole(
+              normalizeShiftOptionsByRole(s.shiftOptionsByRole),
+            );
           if (s.team) setTeamState(s.team);
           if (s.requests) setRequests(s.requests);
           alert("Configuration loaded successfully!");
@@ -2392,7 +2480,7 @@ const ShiftScheduler = () => {
       return;
     }
 
-    const disallowedShiftSet = new Set(["M", "T", "N"]);
+    const allowedShiftSet = new Set(shiftOptionsByRole.editor || []);
     let disallowedCount = 0;
 
     const empName =
@@ -2405,9 +2493,8 @@ const ShiftScheduler = () => {
 
       if (
         currentUser.role === "editor" &&
-        !allowEditorWorkingShifts &&
         value &&
-        disallowedShiftSet.has(value)
+        !allowedShiftSet.has(value)
       ) {
         disallowedCount++;
         return;
@@ -2450,7 +2537,7 @@ const ShiftScheduler = () => {
     showToast,
     canWrite,
     currentUser.role,
-    allowEditorWorkingShifts,
+    shiftOptionsByRole,
   ]);
 
   const handleUndo = () => {
@@ -3418,7 +3505,7 @@ const ShiftScheduler = () => {
           team={teamState}
           currentUser={currentUser}
           preSelectedId={preSelectedBulkId}
-          allowEditorWorkingShifts={allowEditorWorkingShifts}
+          shiftOptionsByRole={shiftOptionsByRole}
           onApply={handleBulkApply}
         />
       )}
@@ -3454,7 +3541,7 @@ const ShiftScheduler = () => {
           legends={legends}
           customColors={colors}
           currentUserRole={currentUser.role}
-          allowEditorWorkingShifts={allowEditorWorkingShifts}
+          shiftOptionsByRole={shiftOptionsByRole}
         />
       )}
 
@@ -4350,6 +4437,10 @@ const ShiftScheduler = () => {
             <AdminDashboard
               featureToggles={featureToggles}
               onToggleFeature={handleToggleFeature}
+              shiftOptionsByRole={shiftOptionsByRole}
+              onUpdateShiftOptionsByRole={(options) =>
+                setShiftOptionsByRole(normalizeShiftOptionsByRole(options))
+              }
               onOpenAdminPanel={() => setShowAdmin(true)}
               teamCount={teamState.length}
             />
@@ -4598,7 +4689,7 @@ const ShiftScheduler = () => {
                           onClick={() =>
                             setFocusedEmployeeId(isFocusedRow ? null : emp.id)
                           }
-                          className={`p-1 md:p-1.5 border-b bg-white sticky left-0 z-10 shadow-sm print:static print:border-black print:shadow-none group cursor-pointer ${
+                          className={`p-1 md:p-1.5 border-b bg-white sticky left-0 z-20 shadow-sm print:static print:border-black print:shadow-none group cursor-pointer ${
                             isFocusedRow
                               ? "border-l-2 md:border-l-4 border-t-2 md:border-t-4 border-b-2 md:border-b-4 border-yellow-500 bg-yellow-50"
                               : "border-r"
@@ -4754,9 +4845,9 @@ const ShiftScheduler = () => {
                               w-full h-7 md:h-8 rounded flex items-center justify-center text-xs md:text-xs font-bold shadow-sm print:shadow-none print:rounded-none border relative
                               ${
                                 shiftOverflowInfo.hasShiftOverflow
-                                  ? "ring-2 ring-red-500 z-10"
+                                  ? "ring-2 ring-red-500"
                                   : isRestViolation
-                                    ? "ring-2 ring-orange-500 z-10"
+                                    ? "ring-2 ring-orange-500"
                                     : ""
                               }
                               ${
