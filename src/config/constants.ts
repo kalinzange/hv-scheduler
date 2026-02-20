@@ -21,6 +21,11 @@ export const FIREBASE_CONFIG = {
 
 export const APP_ID = import.meta.env.VITE_APP_ID;
 
+// --- GOOGLE CALENDAR API CONFIGURATION ---
+// Fall back to the Firebase API key when a dedicated Calendar API key is not set.
+export const GOOGLE_CALENDAR_API_KEY =
+  import.meta.env.VITE_GOOGLE_CALENDAR_API_KEY || FIREBASE_CONFIG.apiKey;
+
 // NOTE: Master passwords must NOT be exposed in client code.
 // They are validated server-side via Netlify Function `role-login` using environment variables.
 
@@ -148,6 +153,21 @@ export const DEFAULT_HOLIDAYS = [
   "2026-12-01",
   "2026-12-08",
   "2026-12-25",
+];
+
+export const DEFAULT_HOLIDAY_COUNTRY = "PT";
+
+export const SUPPORTED_HOLIDAY_COUNTRIES = [
+  { code: "PT", name: "Portugal" },
+  { code: "ES", name: "Spain" },
+  { code: "FR", name: "France" },
+  { code: "DE", name: "Germany" },
+  { code: "IT", name: "Italy" },
+  { code: "GB", name: "United Kingdom" },
+  { code: "US", name: "United States" },
+  { code: "BR", name: "Brazil" },
+  { code: "TR", name: "Turkey" },
+  { code: "IN", name: "India" },
 ];
 
 export const INITIAL_TEAM: Employee[] = [

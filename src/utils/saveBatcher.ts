@@ -19,6 +19,26 @@ import type { FeatureToggles, ShiftOptionsByRole } from "../types";
 interface SaveBatch {
   startDateStr?: string;
   holidays?: string[];
+  holidayCountry?: string;
+  holidayLastSyncedAt?: number | null;
+  holidayTypeByDate?: Record<
+    string,
+    {
+      required: boolean;
+      optional: boolean;
+      national: boolean;
+      regional: boolean;
+      regions: string[];
+    }
+  >;
+  holidayNameByDate?: Record<string, string>;
+  holidayVisibility?: {
+    national: boolean;
+    regional: boolean;
+    optional: boolean;
+  };
+  selectedHolidayRegions?: string[];
+  selectedOptionalHolidayDates?: string[];
   minStaff?: Record<string, number>;
   requiredLangs?: string[];
   weekendDays?: number[];

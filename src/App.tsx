@@ -88,6 +88,8 @@ import {
   WEEKDAYS,
   MONTHS,
   DEFAULT_HOLIDAYS,
+  DEFAULT_HOLIDAY_COUNTRY,
+  SUPPORTED_HOLIDAY_COUNTRIES,
   INITIAL_TEAM,
   DEFAULT_FEATURE_TOGGLES,
   DEFAULT_SHIFT_OPTIONS_BY_ROLE,
@@ -95,6 +97,14 @@ import {
 import { TRANSLATIONS } from "./utils/translations";
 import { saveBatcher } from "./utils/saveBatcher";
 import { cacheStore } from "./utils/cacheStore";
+import {
+  loadPublicHolidays,
+  loadHolidaySubdivisions,
+} from "./utils/publicHolidays";
+import type {
+  PublicHolidayEntry,
+  HolidaySubdivision,
+} from "./utils/publicHolidays";
 import { AdminDashboard } from "./components/AdminDashboard";
 
 // --- LAZY-LOADED COMPONENTS (Code Splitting for Better Performance) ---
@@ -656,8 +666,8 @@ const ConfigPanel = ({
   setConfig,
   team,
   setTeam,
-  holidays,
-  setHolidays,
+  holidayTypeColors,
+  setHolidayTypeColors,
   minStaff,
   setMinStaff,
   requiredLangs,
@@ -675,18 +685,6 @@ const ConfigPanel = ({
 }: any) => {
   if (!show) return null;
   const t = TRANSLATIONS[lang as LangCode];
-  const [newHoliday, setNewHoliday] = useState("");
-
-  const handleAddHoliday = () => {
-    if (newHoliday && !holidays.includes(newHoliday)) {
-      setHolidays([...holidays, newHoliday].sort());
-      setNewHoliday("");
-    }
-  };
-
-  const handleRemoveHoliday = (date: string) => {
-    setHolidays(holidays.filter((h: string) => h !== date));
-  };
 
   const handleLangToggle = (l: Language) => {
     if (requiredLangs.includes(l))
@@ -751,36 +749,30 @@ const ConfigPanel = ({
       <div className="bg-gray-50 p-3 rounded mb-4 border space-y-3">
         <div className="border-t pt-1.5 mt-0">
           <label className="block text-xs font-bold text-gray-600 mb-1 flex items-center gap-1">
-            <Calendar size={12} /> {t.holidaysSection}
+            <Calendar size={12} /> Holiday Colors
           </label>
-          <div className="flex gap-1.5 mb-1.5">
-            <input
-              type="date"
-              value={newHoliday}
-              onChange={(e) => setNewHoliday(e.target.value)}
-              className="flex-1 p-0.5 border rounded text-[10px]"
-            />
-            <button
-              onClick={handleAddHoliday}
-              className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded hover:bg-indigo-200"
-            >
-              <Plus size={14} />
-            </button>
-          </div>
-          <div className="max-h-20 overflow-y-auto space-y-0.5">
-            {holidays.map((h: string) => (
-              <div
-                key={h}
-                className="flex justify-between items-center bg-white border px-2 py-1 rounded text-xs"
-              >
-                <span>{h}</span>
-                <button
-                  onClick={() => handleRemoveHoliday(h)}
-                  className="text-red-400 hover:text-red-600"
-                >
-                  <X size={12} />
-                </button>
-              </div>
+          <div className="space-y-2">
+            {(
+              [
+                { key: "national", label: "National" },
+                { key: "regional", label: "Regional" },
+                { key: "optional", label: "Optional" },
+              ] as const
+            ).map((item) => (
+              <label key={item.key} className="flex items-center gap-2 text-xs">
+                <input
+                  type="color"
+                  value={holidayTypeColors[item.key]}
+                  onChange={(e) =>
+                    setHolidayTypeColors({
+                      ...holidayTypeColors,
+                      [item.key]: e.target.value,
+                    })
+                  }
+                  className="w-5 h-5 p-0 border-0 rounded cursor-pointer"
+                />
+                <span className="text-gray-600 font-medium">{item.label}</span>
+              </label>
             ))}
           </div>
         </div>
@@ -1188,6 +1180,50 @@ const ShiftScheduler = () => {
   );
   const [shiftOptionsByRole, setShiftOptionsByRole] =
     useState<ShiftOptionsByRole>(DEFAULT_SHIFT_OPTIONS_BY_ROLE);
+  const [holidayCountry, setHolidayCountry] = useState(DEFAULT_HOLIDAY_COUNTRY);
+  const [holidaySyncStatus, setHolidaySyncStatus] = useState<
+    "idle" | "syncing" | "error"
+  >("idle");
+  const [holidayLastSyncedAt, setHolidayLastSyncedAt] = useState<number | null>(
+    null,
+  );
+  const [holidayTypeByDate, setHolidayTypeByDate] = useState<
+    Record<
+      string,
+      {
+        required: boolean;
+        optional: boolean;
+        national: boolean;
+        regional: boolean;
+        regions: string[];
+      }
+    >
+  >({});
+  const [holidayNameByDate, setHolidayNameByDate] = useState<
+    Record<string, string>
+  >({});
+  const [holidayVisibility, setHolidayVisibility] = useState({
+    national: true,
+    regional: true,
+    optional: true,
+  });
+  const [holidayTypeColors, setHolidayTypeColors] = useState({
+    national: "#dbeafe",
+    regional: "#fef3c7",
+    optional: "#ede9fe",
+  });
+  const [selectedHolidayRegions, setSelectedHolidayRegions] = useState<
+    string[]
+  >([]);
+  const [selectedOptionalHolidayDates, setSelectedOptionalHolidayDates] =
+    useState<string[]>([]);
+  const [holidayRegionsInitialized, setHolidayRegionsInitialized] =
+    useState(false);
+  const [optionalHolidaysInitialized, setOptionalHolidaysInitialized] =
+    useState(false);
+  const [holidaySubdivisionMap, setHolidaySubdivisionMap] = useState<
+    Record<string, HolidaySubdivision>
+  >({});
 
   // Ref to prevent infinite loops between Firebase sync and local save
   const isRemoteUpdate = useRef(false);
@@ -1259,6 +1295,23 @@ const ShiftScheduler = () => {
     });
 
     return normalized;
+  };
+
+  const normalizeHolidayVisibility = (incoming?: unknown) => {
+    const defaults = { national: true, regional: true, optional: true };
+    if (!incoming || typeof incoming !== "object") {
+      return defaults;
+    }
+
+    const raw = incoming as Record<string, unknown>;
+    return {
+      national:
+        typeof raw.national === "boolean" ? raw.national : defaults.national,
+      regional:
+        typeof raw.regional === "boolean" ? raw.regional : defaults.regional,
+      optional:
+        typeof raw.optional === "boolean" ? raw.optional : defaults.optional,
+    };
   };
 
   const isFeatureEnabled = useCallback(
@@ -1529,6 +1582,29 @@ const ShiftScheduler = () => {
               // Batch state updates to reduce re-renders
               if (data.startDateStr) setStartDateStr(data.startDateStr);
               if (data.holidays) setHolidays(data.holidays);
+              if (data.holidayCountry) setHolidayCountry(data.holidayCountry);
+              if (data.holidayLastSyncedAt)
+                setHolidayLastSyncedAt(data.holidayLastSyncedAt);
+              if (data.holidayTypeByDate)
+                setHolidayTypeByDate(data.holidayTypeByDate);
+              if (data.holidayNameByDate)
+                setHolidayNameByDate(data.holidayNameByDate);
+              if (data.holidayVisibility)
+                setHolidayVisibility(
+                  normalizeHolidayVisibility(data.holidayVisibility),
+                );
+              if (data.holidayTypeColors)
+                setHolidayTypeColors(data.holidayTypeColors);
+              if (data.selectedHolidayRegions)
+                setSelectedHolidayRegions(data.selectedHolidayRegions);
+              if (data.selectedHolidayRegions)
+                setHolidayRegionsInitialized(true);
+              if (data.selectedOptionalHolidayDates)
+                setSelectedOptionalHolidayDates(
+                  data.selectedOptionalHolidayDates,
+                );
+              if (data.selectedOptionalHolidayDates)
+                setOptionalHolidaysInitialized(true);
               if (data.minStaff) setMinStaff(data.minStaff);
               if (data.requiredLangs) setRequiredLangs(data.requiredLangs);
               if (data.weekendDays) setWeekendDays(data.weekendDays);
@@ -1876,6 +1952,16 @@ const ShiftScheduler = () => {
     saveBatcher.addChanges({
       startDateStr,
       holidays: isEditor ? undefined : holidays,
+      holidayCountry: isEditor ? undefined : holidayCountry,
+      holidayLastSyncedAt: isEditor ? undefined : holidayLastSyncedAt,
+      holidayTypeByDate: isEditor ? undefined : holidayTypeByDate,
+      holidayNameByDate: isEditor ? undefined : holidayNameByDate,
+      holidayVisibility: isEditor ? undefined : holidayVisibility,
+      holidayTypeColors: isEditor ? undefined : holidayTypeColors,
+      selectedHolidayRegions: isEditor ? undefined : selectedHolidayRegions,
+      selectedOptionalHolidayDates: isEditor
+        ? undefined
+        : selectedOptionalHolidayDates,
       minStaff: isEditor ? undefined : minStaff,
       requiredLangs: isEditor ? undefined : requiredLangs,
       weekendDays: isEditor ? undefined : weekendDays,
@@ -1894,6 +1980,14 @@ const ShiftScheduler = () => {
   }, [
     startDateStr,
     holidays,
+    holidayCountry,
+    holidayLastSyncedAt,
+    holidayTypeByDate,
+    holidayNameByDate,
+    holidayVisibility,
+    holidayTypeColors,
+    selectedHolidayRegions,
+    selectedOptionalHolidayDates,
     minStaff,
     requiredLangs,
     weekendDays,
@@ -1916,6 +2010,21 @@ const ShiftScheduler = () => {
     if (confirm("Are you sure you want to reset all data to defaults?")) {
       setStartDateStr("2025-12-15");
       setHolidays(DEFAULT_HOLIDAYS);
+      setHolidayCountry(DEFAULT_HOLIDAY_COUNTRY);
+      setHolidayLastSyncedAt(null);
+      setHolidaySyncStatus("idle");
+      setHolidayTypeByDate({});
+      setHolidayNameByDate({});
+      setHolidayVisibility({ national: true, regional: true, optional: true });
+      setHolidayTypeColors({
+        national: "#dbeafe",
+        regional: "#fef3c7",
+        optional: "#ede9fe",
+      });
+      setSelectedHolidayRegions([]);
+      setSelectedOptionalHolidayDates([]);
+      setHolidayRegionsInitialized(false);
+      setOptionalHolidaysInitialized(false);
       setOverrides({});
       setPublishedOverrides({});
       setRequests([]);
@@ -1980,6 +2089,11 @@ const ShiftScheduler = () => {
         const publishData = {
           startDateStr,
           holidays,
+          holidayCountry,
+          holidayLastSyncedAt,
+          holidayTypeByDate,
+          holidayVisibility,
+          selectedHolidayRegions,
           minStaff,
           requiredLangs,
           weekendDays,
@@ -2204,6 +2318,14 @@ const ShiftScheduler = () => {
       state: {
         startDateStr,
         holidays,
+        holidayCountry,
+        holidayLastSyncedAt,
+        holidayTypeByDate,
+        holidayNameByDate,
+        holidayVisibility,
+        holidayTypeColors,
+        selectedHolidayRegions,
+        selectedOptionalHolidayDates,
         minStaff,
         requiredLangs,
         weekendDays,
@@ -2244,6 +2366,23 @@ const ShiftScheduler = () => {
           const s = json.state;
           if (s.startDateStr) setStartDateStr(s.startDateStr);
           if (s.holidays) setHolidays(s.holidays);
+          if (s.holidayCountry) setHolidayCountry(s.holidayCountry);
+          if (s.holidayLastSyncedAt)
+            setHolidayLastSyncedAt(s.holidayLastSyncedAt);
+          if (s.holidayTypeByDate) setHolidayTypeByDate(s.holidayTypeByDate);
+          if (s.holidayNameByDate) setHolidayNameByDate(s.holidayNameByDate);
+          if (s.holidayVisibility)
+            setHolidayVisibility(
+              normalizeHolidayVisibility(s.holidayVisibility),
+            );
+          if (s.holidayTypeColors) setHolidayTypeColors(s.holidayTypeColors);
+          if (s.selectedHolidayRegions)
+            setSelectedHolidayRegions(s.selectedHolidayRegions);
+          if (s.selectedHolidayRegions) setHolidayRegionsInitialized(true);
+          if (s.selectedOptionalHolidayDates)
+            setSelectedOptionalHolidayDates(s.selectedOptionalHolidayDates);
+          if (s.selectedOptionalHolidayDates)
+            setOptionalHolidaysInitialized(true);
           if (s.minStaff) setMinStaff(s.minStaff);
           if (s.requiredLangs) setRequiredLangs(s.requiredLangs);
           if (s.weekendDays) setWeekendDays(s.weekendDays);
@@ -2297,6 +2436,659 @@ const ShiftScheduler = () => {
     };
     reader.readAsText(file);
   };
+
+  const mergeHolidaysForYears = (
+    existingHolidays: string[],
+    autoHolidays: string[],
+    targetYears: number[],
+  ) => {
+    const targetYearSet = new Set(targetYears);
+    const keepExisting = existingHolidays.filter((dateStr) => {
+      const year = Number(dateStr.slice(0, 4));
+      return !targetYearSet.has(year);
+    });
+
+    return Array.from(new Set([...keepExisting, ...autoHolidays])).sort();
+  };
+
+  const mergeHolidayTypesForYears = (
+    existingTypes: Record<
+      string,
+      {
+        required: boolean;
+        optional: boolean;
+        national: boolean;
+        regional: boolean;
+        regions: string[];
+      }
+    >,
+    autoEntries: PublicHolidayEntry[],
+    targetYears: number[],
+  ) => {
+    const targetYearSet = new Set(targetYears);
+    const merged: Record<
+      string,
+      {
+        required: boolean;
+        optional: boolean;
+        national: boolean;
+        regional: boolean;
+        regions: string[];
+      }
+    > = {};
+
+    Object.entries(existingTypes).forEach(([dateStr, typeInfo]) => {
+      const year = Number(dateStr.slice(0, 4));
+      if (!targetYearSet.has(year)) {
+        merged[dateStr] = typeInfo;
+      }
+    });
+
+    autoEntries.forEach((entry) => {
+      merged[entry.date] = {
+        required: !!entry.required,
+        optional: !!entry.optional,
+        national: !!entry.national,
+        regional: !!entry.regional,
+        regions: Array.isArray(entry.regions) ? entry.regions : [],
+      };
+    });
+
+    return merged;
+  };
+
+  const mergeHolidayNamesForYears = (
+    existingNames: Record<string, string>,
+    autoEntries: PublicHolidayEntry[],
+    targetYears: number[],
+  ) => {
+    const targetYearSet = new Set(targetYears);
+    const merged: Record<string, string> = {};
+
+    Object.entries(existingNames).forEach(([dateStr, holidayName]) => {
+      const year = Number(dateStr.slice(0, 4));
+      if (!targetYearSet.has(year)) {
+        merged[dateStr] = holidayName;
+      }
+    });
+
+    autoEntries.forEach((entry) => {
+      if (entry.name) {
+        merged[entry.date] = entry.name;
+      }
+    });
+
+    return merged;
+  };
+
+  const areStringArraysEqual = (left: string[], right: string[]) => {
+    if (left.length !== right.length) return false;
+    return left.every((value, index) => value === right[index]);
+  };
+
+  useEffect(() => {
+    if (isLoading || initError) return;
+    if (currentUser.role !== "manager" && currentUser.role !== "admin") {
+      return;
+    }
+
+    let cancelled = false;
+    const baseYear = currentDate.getFullYear();
+    const targetYears = [baseYear - 2, baseYear - 1, baseYear, baseYear + 1];
+
+    const sync = async () => {
+      setHolidaySyncStatus("syncing");
+      try {
+        const loadedEntries = await loadPublicHolidays(
+          holidayCountry,
+          targetYears,
+        );
+        const loadedHolidays = loadedEntries.map((entry) => entry.date);
+
+        if (cancelled) return;
+
+        setHolidays((previous) => {
+          const merged = mergeHolidaysForYears(
+            previous,
+            loadedHolidays,
+            targetYears,
+          );
+          return areStringArraysEqual(previous, merged) ? previous : merged;
+        });
+        setHolidayTypeByDate((previous) =>
+          mergeHolidayTypesForYears(previous, loadedEntries, targetYears),
+        );
+        setHolidayNameByDate((previous) =>
+          mergeHolidayNamesForYears(previous, loadedEntries, targetYears),
+        );
+        setHolidayLastSyncedAt(Date.now());
+        setHolidaySyncStatus("idle");
+      } catch (error) {
+        if (cancelled) return;
+        console.warn("[HolidaySync] Failed to sync public holidays:", error);
+        setHolidaySyncStatus("error");
+      }
+    };
+
+    sync();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    holidayCountry,
+    currentDate,
+    currentUser.role,
+    isLoading,
+    initError,
+    nextMonthExtraDays,
+  ]);
+
+  useEffect(() => {
+    if (isLoading || initError) return;
+
+    let cancelled = false;
+
+    const loadSubdivisions = async () => {
+      try {
+        const items = await loadHolidaySubdivisions(holidayCountry);
+        if (cancelled) return;
+
+        const map = items.reduce(
+          (acc, item) => {
+            acc[item.code] = item;
+            return acc;
+          },
+          {} as Record<string, HolidaySubdivision>,
+        );
+
+        setHolidaySubdivisionMap(map);
+      } catch (error) {
+        if (cancelled) return;
+        console.warn(
+          "[HolidaySync] Failed to load subdivision catalog:",
+          error,
+        );
+        setHolidaySubdivisionMap({});
+      }
+    };
+
+    loadSubdivisions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [holidayCountry, isLoading, initError]);
+
+  const availableHolidayRegions = useMemo(() => {
+    const unique = new Set<string>();
+    Object.values(holidayTypeByDate).forEach((entry) => {
+      if (!entry.regional) return;
+      (entry.regions || []).forEach((region) => {
+        if (region) unique.add(region);
+      });
+    });
+    return Array.from(unique).sort();
+  }, [holidayTypeByDate]);
+
+  const holidayRegionOptions = useMemo(() => {
+    return availableHolidayRegions
+      .map((code) => {
+        const subdivision = holidaySubdivisionMap[code];
+        const name = subdivision?.name || code;
+        const type = subdivision?.type || "Region";
+
+        return {
+          code,
+          label: name,
+          type:
+            type.length > 0
+              ? `${type.charAt(0).toUpperCase()}${type.slice(1)}`
+              : "Region",
+        };
+      })
+      .sort((left, right) => left.label.localeCompare(right.label));
+  }, [availableHolidayRegions, holidaySubdivisionMap]);
+
+  const availableOptionalHolidayDates = useMemo(() => {
+    return Object.entries(holidayTypeByDate)
+      .filter(([, entry]) => {
+        if (!entry.optional) return false;
+        const regionCodes = Array.isArray(entry.regions)
+          ? entry.regions.filter((code) => !!code)
+          : [];
+        const isMunicipal = regionCodes.some((code) =>
+          /municip/i.test(holidaySubdivisionMap[code]?.type || ""),
+        );
+        return !isMunicipal;
+      })
+      .map(([date]) => date)
+      .sort();
+  }, [holidayTypeByDate, holidaySubdivisionMap]);
+
+  const optionalHolidayOptions = useMemo(() => {
+    const baseOptions = availableOptionalHolidayDates.map((date) => {
+      const holidayName = (holidayNameByDate[date] || "").trim();
+      const typeInfo = holidayTypeByDate[date];
+      const regionCodes = Array.isArray(typeInfo?.regions)
+        ? typeInfo.regions.filter((code) => !!code)
+        : [];
+      const regionNames = regionCodes
+        .map((code) => holidaySubdivisionMap[code]?.name || code)
+        .filter((name) => !!name);
+      const primaryRegionName = regionNames[0] || "";
+      const dateValue = new Date(`${date}T00:00:00`);
+      const formattedDate = Number.isNaN(dateValue.getTime())
+        ? date
+        : dateValue.toLocaleDateString("en-GB", {
+            weekday: "short",
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          });
+
+      const subdivisionTypeRaw = regionCodes[0]
+        ? holidaySubdivisionMap[regionCodes[0]]?.type || "regional"
+        : "regional";
+      const subdivisionType = /municip/i.test(subdivisionTypeRaw)
+        ? "Municipal"
+        : subdivisionTypeRaw.length
+          ? `${subdivisionTypeRaw.charAt(0).toUpperCase()}${subdivisionTypeRaw.slice(1)}`
+          : "Regional";
+
+      let label = holidayName;
+
+      if (!label && primaryRegionName && typeInfo?.regional) {
+        label = `${primaryRegionName} ${subdivisionType} Holiday`;
+      }
+
+      if (
+        label &&
+        /municipal holiday/i.test(label) &&
+        primaryRegionName &&
+        !label.toLowerCase().includes(primaryRegionName.toLowerCase())
+      ) {
+        label = `${primaryRegionName} ${label}`;
+      }
+
+      if (!label) {
+        label = formattedDate;
+      }
+
+      return { date, label, formattedDate };
+    });
+
+    const labelCounts = baseOptions.reduce(
+      (acc, option) => {
+        acc[option.label] = (acc[option.label] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+
+    return baseOptions.map((option) => ({
+      date: option.date,
+      label:
+        labelCounts[option.label] > 1
+          ? `${option.label} (${option.formattedDate})`
+          : option.label,
+    }));
+  }, [
+    availableOptionalHolidayDates,
+    holidayNameByDate,
+    holidayTypeByDate,
+    holidaySubdivisionMap,
+  ]);
+
+  useEffect(() => {
+    setSelectedHolidayRegions((previous) => {
+      if (availableHolidayRegions.length === 0) {
+        return previous.length === 0 ? previous : [];
+      }
+
+      const normalized = previous.filter((region) =>
+        availableHolidayRegions.includes(region),
+      );
+
+      if (!holidayRegionsInitialized && normalized.length === 0) {
+        return availableHolidayRegions;
+      }
+
+      const sameLength = normalized.length === previous.length;
+      const sameOrder = sameLength
+        ? normalized.every((region, index) => region === previous[index])
+        : false;
+
+      return sameOrder ? previous : normalized;
+    });
+
+    if (!holidayRegionsInitialized && availableHolidayRegions.length > 0) {
+      setHolidayRegionsInitialized(true);
+    }
+  }, [availableHolidayRegions, holidayRegionsInitialized]);
+
+  useEffect(() => {
+    setSelectedOptionalHolidayDates((previous) => {
+      if (availableOptionalHolidayDates.length === 0) {
+        return previous.length === 0 ? previous : [];
+      }
+
+      const normalized = previous.filter((date) =>
+        availableOptionalHolidayDates.includes(date),
+      );
+
+      if (!optionalHolidaysInitialized && normalized.length === 0) {
+        return availableOptionalHolidayDates;
+      }
+
+      const sameLength = normalized.length === previous.length;
+      const sameOrder = sameLength
+        ? normalized.every((date, index) => date === previous[index])
+        : false;
+
+      return sameOrder ? previous : normalized;
+    });
+
+    if (
+      !optionalHolidaysInitialized &&
+      availableOptionalHolidayDates.length > 0
+    ) {
+      setOptionalHolidaysInitialized(true);
+    }
+  }, [availableOptionalHolidayDates, optionalHolidaysInitialized]);
+
+  const getHolidayDisplayInfo = useCallback(
+    (dateStr: string) => {
+      const formatDateFallback = () => {
+        const dateValue = new Date(`${dateStr}T00:00:00`);
+        return Number.isNaN(dateValue.getTime())
+          ? dateStr
+          : dateValue.toLocaleDateString("en-GB", {
+              weekday: "short",
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            });
+      };
+
+      if (!holidays.includes(dateStr)) {
+        return {
+          isVisible: false,
+          type: null as "national" | "municipal" | "optional" | null,
+          typeLabel: "",
+          name: holidayNameByDate[dateStr] || "",
+          municipality: "",
+          tooltipLines: [] as string[],
+        };
+      }
+
+      const typeInfo = holidayTypeByDate[dateStr];
+      const regionCodes = Array.isArray(typeInfo?.regions)
+        ? typeInfo.regions.filter((code) => !!code)
+        : [];
+      const regionNames = regionCodes
+        .map((code) => holidaySubdivisionMap[code]?.name || code)
+        .filter((name) => !!name);
+      const primaryRegionName = regionNames[0] || "";
+      const subdivisionTypeRaw = regionCodes[0]
+        ? holidaySubdivisionMap[regionCodes[0]]?.type || "regional"
+        : "regional";
+      const subdivisionType = /municip/i.test(subdivisionTypeRaw)
+        ? "Municipal"
+        : subdivisionTypeRaw.length
+          ? `${subdivisionTypeRaw.charAt(0).toUpperCase()}${subdivisionTypeRaw.slice(1)}`
+          : "Regional";
+
+      const buildHolidayName = () => {
+        let name = (holidayNameByDate[dateStr] || "").trim();
+
+        if (!name && primaryRegionName && typeInfo?.regional) {
+          name = `${primaryRegionName} ${subdivisionType} Holiday`;
+        }
+
+        if (
+          name &&
+          /municipal holiday/i.test(name) &&
+          primaryRegionName &&
+          !name.toLowerCase().includes(primaryRegionName.toLowerCase())
+        ) {
+          name = `${primaryRegionName} ${name}`;
+        }
+
+        return name;
+      };
+
+      const holidayName = buildHolidayName();
+      const dateRegions = typeInfo?.regions || [];
+      const matchesRegion =
+        dateRegions.length === 0 ||
+        dateRegions.some((region) => selectedHolidayRegions.includes(region));
+
+      const matchedRegionCodes =
+        selectedHolidayRegions.length > 0
+          ? regionCodes.filter((code) => selectedHolidayRegions.includes(code))
+          : regionCodes;
+      const chosenRegionCode =
+        matchedRegionCodes[0] ||
+        selectedHolidayRegions[0] ||
+        regionCodes[0] ||
+        "";
+      const chosenMunicipality = chosenRegionCode
+        ? holidaySubdivisionMap[chosenRegionCode]?.name || chosenRegionCode
+        : "";
+
+      const isMunicipal = /municip/i.test(subdivisionTypeRaw);
+      const tooltipLines: string[] = [];
+
+      const hasNational =
+        !!typeInfo?.required &&
+        !!typeInfo?.national &&
+        holidayVisibility.national;
+      const hasMunicipalOrRegional =
+        !!typeInfo?.regional && holidayVisibility.regional && matchesRegion;
+      const hasOptional =
+        !!typeInfo?.optional &&
+        !isMunicipal &&
+        holidayVisibility.optional &&
+        selectedOptionalHolidayDates.includes(dateStr);
+
+      if (!typeInfo && holidayVisibility.national) {
+        tooltipLines.push(
+          holidayName
+            ? `National Public Holiday – ${holidayName}`
+            : "National Public Holiday",
+        );
+      }
+
+      if (hasNational) {
+        tooltipLines.push(
+          holidayName
+            ? `National Public Holiday – ${holidayName}`
+            : "National Public Holiday",
+        );
+      }
+
+      if (hasMunicipalOrRegional) {
+        const municipalLabel = isMunicipal ? "Municipal" : "Regional";
+        const lineMunicipality = chosenMunicipality || primaryRegionName;
+        if (lineMunicipality) {
+          tooltipLines.push(
+            `${municipalLabel} Public Holiday – ${lineMunicipality}`,
+          );
+        } else {
+          tooltipLines.push(`${municipalLabel} Public Holiday`);
+        }
+      }
+
+      if (hasOptional) {
+        const optionalName = holidayName || formatDateFallback();
+        tooltipLines.push(`Non-Public Holiday – ${optionalName}`);
+      }
+
+      if (!typeInfo) {
+        const isVisible = holidayVisibility.national;
+        return {
+          isVisible,
+          type: isVisible ? "national" : null,
+          typeLabel: isVisible ? "National" : "",
+          name: holidayName,
+          municipality: "",
+          tooltipLines,
+        };
+      }
+
+      if (typeInfo.optional && !isMunicipal) {
+        const isVisible =
+          holidayVisibility.optional &&
+          selectedOptionalHolidayDates.includes(dateStr);
+        const resolvedType = hasNational
+          ? "national"
+          : hasMunicipalOrRegional
+            ? "municipal"
+            : isVisible
+              ? "optional"
+              : null;
+        return {
+          isVisible: tooltipLines.length > 0,
+          type: resolvedType,
+          typeLabel:
+            resolvedType === "national"
+              ? "National"
+              : resolvedType === "municipal"
+                ? isMunicipal
+                  ? "Municipal"
+                  : "Regional"
+                : resolvedType === "optional"
+                  ? "Optional"
+                  : "",
+          name: holidayName,
+          municipality: chosenMunicipality,
+          tooltipLines,
+        };
+      }
+
+      const resolvedType = hasNational
+        ? "national"
+        : hasMunicipalOrRegional
+          ? "municipal"
+          : hasOptional
+            ? "optional"
+            : null;
+
+      if (resolvedType) {
+        return {
+          isVisible: tooltipLines.length > 0,
+          type: resolvedType,
+          typeLabel:
+            resolvedType === "national"
+              ? "National"
+              : resolvedType === "municipal"
+                ? isMunicipal
+                  ? "Municipal"
+                  : "Regional"
+                : "Optional",
+          name: holidayName,
+          municipality: chosenMunicipality,
+          tooltipLines,
+        };
+      }
+
+      return {
+        isVisible: false,
+        type: null as "national" | "municipal" | "optional" | null,
+        typeLabel: "",
+        name: holidayName,
+        municipality: "",
+        tooltipLines,
+      };
+    },
+    [
+      holidays,
+      holidayTypeByDate,
+      holidayNameByDate,
+      holidaySubdivisionMap,
+      holidayVisibility,
+      selectedHolidayRegions,
+      selectedOptionalHolidayDates,
+    ],
+  );
+
+  const handleHolidayVisibilityChange = useCallback(
+    (scope: "national" | "regional" | "optional", enabled: boolean) => {
+      setHolidayVisibility((previous) => {
+        const next = { ...previous, [scope]: enabled };
+        if (!next.national && !next.regional && !next.optional) {
+          return previous;
+        }
+        return next;
+      });
+    },
+    [],
+  );
+
+  const handleToggleHolidayRegion = useCallback(
+    (region: string, enabled: boolean) => {
+      setSelectedHolidayRegions((previous) => {
+        if (enabled) {
+          if (previous.includes(region)) return previous;
+          return [...previous, region].sort();
+        }
+
+        return previous.filter((item) => item !== region);
+      });
+    },
+    [],
+  );
+
+  const handleSelectAllHolidayRegions = useCallback(() => {
+    setSelectedHolidayRegions(availableHolidayRegions);
+  }, [availableHolidayRegions]);
+
+  const getHolidayTypeColor = useCallback(
+    (type: string | null | undefined) => {
+      if (!type) return undefined;
+      if (type === "municipal") return holidayTypeColors.regional;
+      if (type === "national" || type === "optional") {
+        return holidayTypeColors[type];
+      }
+      return undefined;
+    },
+    [holidayTypeColors],
+  );
+
+  const handleClearHolidayRegions = useCallback(() => {
+    setSelectedHolidayRegions([]);
+  }, []);
+
+  const handleToggleOptionalHoliday = useCallback(
+    (date: string, enabled: boolean) => {
+      setSelectedOptionalHolidayDates((previous) => {
+        if (enabled) {
+          if (previous.includes(date)) return previous;
+          return [...previous, date].sort();
+        }
+
+        return previous.filter((item) => item !== date);
+      });
+    },
+    [],
+  );
+
+  const handleSelectAllOptionalHolidays = useCallback(() => {
+    setSelectedOptionalHolidayDates(availableOptionalHolidayDates);
+  }, [availableOptionalHolidayDates]);
+
+  const handleClearOptionalHolidays = useCallback(() => {
+    setSelectedOptionalHolidayDates([]);
+  }, []);
+
+  const handleHolidayCountryChange = useCallback((countryCode: string) => {
+    setHolidayCountry(countryCode);
+    setSelectedHolidayRegions([]);
+    setSelectedOptionalHolidayDates([]);
+    setHolidayRegionsInitialized(false);
+    setOptionalHolidaysInitialized(false);
+  }, []);
 
   const t = TRANSLATIONS[lang];
 
@@ -2500,17 +3292,15 @@ const ShiftScheduler = () => {
         return;
       }
 
-      if (empId === loggedInUserId) {
-        newRequests.push({
-          id: crypto.randomUUID(),
-          empId,
-          empName,
-          date: dateStr,
-          newShift: value,
-          status: "PENDING",
-          timestamp: Date.now(),
-        });
-      }
+      newRequests.push({
+        id: crypto.randomUUID(),
+        empId,
+        empName,
+        date: dateStr,
+        newShift: value,
+        status: "PENDING",
+        timestamp: Date.now(),
+      });
     });
 
     if (newRequests.length > 0) {
@@ -2640,7 +3430,8 @@ const ShiftScheduler = () => {
       const dateObj = new Date(year, month, d);
       const dateStr = getDateKey(dateObj);
       const isWeekend = weekendDays.includes(dateObj.getDay());
-      const isPtHoliday = holidays.includes(dateStr);
+      const holidayInfo = getHolidayDisplayInfo(dateStr);
+      const isPtHoliday = holidayInfo.isVisible;
 
       const shifts: Record<string, OverrideType> = {};
       const pendingReqs: Record<string, boolean> = {};
@@ -2691,6 +3482,11 @@ const ShiftScheduler = () => {
           .slice(0, 3),
         isWeekend,
         isPtHoliday,
+        holidayType: holidayInfo.type,
+        holidayTypeLabel: holidayInfo.typeLabel,
+        holidayName: holidayInfo.name,
+        municipality: holidayInfo.municipality || "",
+        holidayTooltip: (holidayInfo.tooltipLines || []).join("\n"),
         shifts,
         missing,
         lowStaff,
@@ -2718,7 +3514,8 @@ const ShiftScheduler = () => {
         const dateObj = new Date(nextYear, nextMonth, d);
         const dateStr = getDateKey(dateObj);
         const isWeekend = weekendDays.includes(dateObj.getDay());
-        const isPtHoliday = holidays.includes(dateStr);
+        const holidayInfo = getHolidayDisplayInfo(dateStr);
+        const isPtHoliday = holidayInfo.isVisible;
 
         const shifts: Record<string, OverrideType> = {};
         const pendingReqs: Record<string, boolean> = {};
@@ -2771,6 +3568,11 @@ const ShiftScheduler = () => {
             .slice(0, 3),
           isWeekend,
           isPtHoliday,
+          holidayType: holidayInfo.type,
+          holidayTypeLabel: holidayInfo.typeLabel,
+          holidayName: holidayInfo.name,
+          municipality: holidayInfo.municipality || "",
+          holidayTooltip: (holidayInfo.tooltipLines || []).join("\n"),
           shifts,
           missing,
           lowStaff,
@@ -2795,6 +3597,7 @@ const ShiftScheduler = () => {
     minStaff,
     requiredLangs,
     weekendDays,
+    getHolidayDisplayInfo,
     effectiveOverrides,
     requests,
     nextMonthExtraDays,
@@ -4411,8 +5214,8 @@ const ShiftScheduler = () => {
           setConfig={setConfig}
           team={teamState}
           setTeam={setTeamState}
-          holidays={holidays}
-          setHolidays={setHolidays}
+          holidayTypeColors={holidayTypeColors}
+          setHolidayTypeColors={setHolidayTypeColors}
           minStaff={minStaff}
           setMinStaff={setMinStaff}
           requiredLangs={requiredLangs}
@@ -4443,6 +5246,25 @@ const ShiftScheduler = () => {
               }
               onOpenAdminPanel={() => setShowAdmin(true)}
               teamCount={teamState.length}
+              holidayCountry={holidayCountry}
+              onHolidayCountryChange={handleHolidayCountryChange}
+              holidayCountryOptions={SUPPORTED_HOLIDAY_COUNTRIES}
+              holidaySyncStatus={holidaySyncStatus}
+              holidayLastSyncedAt={holidayLastSyncedAt}
+              showNationalHolidays={holidayVisibility.national}
+              showRegionalHolidays={holidayVisibility.regional}
+              showOptionalHolidays={holidayVisibility.optional}
+              onHolidayVisibilityChange={handleHolidayVisibilityChange}
+              holidayRegionOptions={holidayRegionOptions}
+              selectedHolidayRegions={selectedHolidayRegions}
+              onToggleHolidayRegion={handleToggleHolidayRegion}
+              onSelectAllHolidayRegions={handleSelectAllHolidayRegions}
+              onClearHolidayRegions={handleClearHolidayRegions}
+              optionalHolidayOptions={optionalHolidayOptions}
+              selectedOptionalHolidayDates={selectedOptionalHolidayDates}
+              onToggleOptionalHoliday={handleToggleOptionalHoliday}
+              onSelectAllOptionalHolidays={handleSelectAllOptionalHolidays}
+              onClearOptionalHolidays={handleClearOptionalHolidays}
             />
           ) : showCalendarView ? (
             <>
@@ -4570,6 +5392,10 @@ const ShiftScheduler = () => {
                         "0",
                       )}`;
                       const isToday = day.fullDate === todayStr;
+                      const headerHolidayBg =
+                        day.isPtHoliday && !isFocused && !isSelected && !isToday
+                          ? getHolidayTypeColor(day.holidayType)
+                          : undefined;
                       return (
                         <th
                           key={day.fullDate}
@@ -4640,24 +5466,43 @@ const ShiftScheduler = () => {
                                   : day.isWeekend
                                     ? "bg-indigo-50 print:bg-gray-100 border-r"
                                     : "bg-gray-100 border-r"
-                          } ${
-                            day.isPtHoliday &&
-                            !isFocused &&
-                            !isSelected &&
-                            !isToday
-                              ? "bg-red-50 print:bg-gray-200"
-                              : ""
                           } print:border-black hover:bg-gray-200`}
-                          title={
+                          style={
+                            headerHolidayBg
+                              ? { backgroundColor: headerHolidayBg }
+                              : undefined
+                          }
+                          title={[
                             isSelected
                               ? "Selected - Shift+Click to extend, Ctrl+Click to deselect"
-                              : "Click to focus, Ctrl+Click to add, Shift+Click for range"
-                          }
+                              : "Click to focus, Ctrl+Click to add, Shift+Click for range",
+                            day.holidayTooltip || "",
+                          ]
+                            .filter(Boolean)
+                            .join("\n")}
                         >
-                          <div className="text-xs md:text-xs font-bold text-gray-700 print:text-black">
+                          <div
+                            className="text-xs md:text-xs font-bold print:text-black text-gray-700"
+                            style={
+                              day.isPtHoliday
+                                ? {
+                                    color: getHolidayTypeColor(day.holidayType),
+                                  }
+                                : undefined
+                            }
+                          >
                             {day.date}
                           </div>
-                          <div className="text-[10px] md:text-xs text-gray-500 uppercase print:text-black">
+                          <div
+                            className="text-[10px] md:text-xs uppercase print:text-black text-gray-500"
+                            style={
+                              day.isPtHoliday
+                                ? {
+                                    color: getHolidayTypeColor(day.holidayType),
+                                  }
+                                : undefined
+                            }
+                          >
                             {day.weekDay}
                           </div>
                         </th>
@@ -4799,6 +5644,15 @@ const ShiftScheduler = () => {
                           const isSelected = selectedDates.includes(
                             day.fullDate,
                           );
+                          const bodyHolidayBg =
+                            day.isPtHoliday &&
+                            !isToday &&
+                            !isSelected &&
+                            !isBothFocused &&
+                            !isFocusedRow &&
+                            !isFocused
+                              ? getHolidayTypeColor(day.holidayType)
+                              : undefined;
 
                           return (
                             <td
@@ -4831,6 +5685,12 @@ const ShiftScheduler = () => {
                             }
                             cursor-pointer hover:opacity-80
                           `}
+                              style={
+                                bodyHolidayBg
+                                  ? { backgroundColor: bodyHolidayBg }
+                                  : undefined
+                              }
+                              title={day.holidayTooltip || ""}
                             >
                               <div
                                 onClick={(e) => {

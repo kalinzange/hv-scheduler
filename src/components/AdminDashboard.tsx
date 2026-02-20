@@ -1,5 +1,12 @@
 import React, { useState } from "react";
-import { Shield, Users, Settings2, X } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Shield,
+  Users,
+  Settings2,
+  X,
+} from "lucide-react";
 import type {
   FeatureKey,
   FeatureToggles,
@@ -92,6 +99,28 @@ interface AdminDashboardProps {
   onUpdateShiftOptionsByRole: (options: ShiftOptionsByRole) => void;
   onOpenAdminPanel: () => void;
   teamCount: number;
+  holidayCountry: string;
+  onHolidayCountryChange: (countryCode: string) => void;
+  holidayCountryOptions: Array<{ code: string; name: string }>;
+  holidaySyncStatus: "idle" | "syncing" | "error";
+  holidayLastSyncedAt: number | null;
+  showNationalHolidays: boolean;
+  showRegionalHolidays: boolean;
+  showOptionalHolidays: boolean;
+  onHolidayVisibilityChange: (
+    scope: "national" | "regional" | "optional",
+    enabled: boolean,
+  ) => void;
+  holidayRegionOptions: Array<{ code: string; label: string; type: string }>;
+  selectedHolidayRegions: string[];
+  onToggleHolidayRegion: (region: string, enabled: boolean) => void;
+  onSelectAllHolidayRegions: () => void;
+  onClearHolidayRegions: () => void;
+  optionalHolidayOptions: Array<{ date: string; label: string }>;
+  selectedOptionalHolidayDates: string[];
+  onToggleOptionalHoliday: (date: string, enabled: boolean) => void;
+  onSelectAllOptionalHolidays: () => void;
+  onClearOptionalHolidays: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -101,15 +130,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onUpdateShiftOptionsByRole,
   onOpenAdminPanel,
   teamCount,
+  holidayCountry,
+  onHolidayCountryChange,
+  holidayCountryOptions,
+  holidaySyncStatus,
+  holidayLastSyncedAt,
+  showNationalHolidays,
+  showRegionalHolidays,
+  showOptionalHolidays,
+  onHolidayVisibilityChange,
+  holidayRegionOptions,
+  selectedHolidayRegions,
+  onToggleHolidayRegion,
+  onSelectAllHolidayRegions,
+  onClearHolidayRegions,
+  optionalHolidayOptions,
+  selectedOptionalHolidayDates,
+  onToggleOptionalHoliday,
+  onSelectAllOptionalHolidays,
+  onClearOptionalHolidays,
 }) => {
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [activeRole, setActiveRole] = useState<NonAdminRoleId>("editor");
+  const [regionSearchQuery, setRegionSearchQuery] = useState("");
+  const [optionalSearchQuery, setOptionalSearchQuery] = useState("");
+  const [regionalAreasExpanded, setRegionalAreasExpanded] = useState(true);
+  const [optionalHolidaysExpanded, setOptionalHolidaysExpanded] =
+    useState(true);
 
   const visibleFeatures = FEATURE_CATALOG.filter(
     (feature) => feature.key !== "viewRequests",
   );
 
-  const isFeatureDisabled = (role: NonAdminRoleId, _feature: FeatureKey) => {
+  const isFeatureDisabled = (_role: NonAdminRoleId, _feature: FeatureKey) => {
     return false;
   };
 
@@ -126,6 +179,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       [role]: next,
     });
   };
+
+  const normalizedRegionQuery = regionSearchQuery.trim().toLowerCase();
+
+  const filteredHolidayRegionOptions = holidayRegionOptions.filter((option) => {
+    if (!normalizedRegionQuery) return true;
+    const haystack =
+      `${option.label} ${option.code} ${option.type}`.toLowerCase();
+    return haystack.includes(normalizedRegionQuery);
+  });
+
+  const groupedHolidayRegionOptions = filteredHolidayRegionOptions.reduce(
+    (groups, option) => {
+      const key = option.type || "Region";
+      if (!groups[key]) {
+        groups[key] = [];
+      }
+      groups[key].push(option);
+      return groups;
+    },
+    {} as Record<string, Array<{ code: string; label: string; type: string }>>,
+  );
+
+  const sortedGroupKeys = Object.keys(groupedHolidayRegionOptions).sort(
+    (a, b) => a.localeCompare(b),
+  );
+
+  const normalizedOptionalQuery = optionalSearchQuery.trim().toLowerCase();
+  const filteredOptionalHolidayOptions = optionalHolidayOptions.filter(
+    (option) => {
+      if (!normalizedOptionalQuery) return true;
+      const haystack = `${option.label} ${option.date}`.toLowerCase();
+      return haystack.includes(normalizedOptionalQuery);
+    },
+  );
 
   return (
     <div className="p-4 md:p-6 space-y-6">
@@ -189,6 +276,314 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
         <div className="text-[11px] text-slate-500 mt-3">
           Changes apply immediately and affect the UI for each role.
+        </div>
+      </div>
+
+      <div className="rounded-xl border bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h3 className="text-sm font-bold text-slate-700">
+              Public Holidays
+            </h3>
+            <p className="text-xs text-slate-500">
+              Select country. Holidays auto-sync with low API usage.
+            </p>
+          </div>
+        </div>
+        <div className="mt-3 flex flex-col gap-2">
+          <label className="text-xs font-medium text-slate-600">
+            Holiday Country
+          </label>
+          <select
+            value={holidayCountry}
+            onChange={(event) => onHolidayCountryChange(event.target.value)}
+            className="px-3 py-2 border rounded-md text-sm"
+          >
+            {holidayCountryOptions.map((country) => (
+              <option key={country.code} value={country.code}>
+                {country.name} ({country.code})
+              </option>
+            ))}
+          </select>
+          <div className="text-[11px] text-slate-500">
+            {holidaySyncStatus === "syncing"
+              ? "Syncing holidays..."
+              : holidaySyncStatus === "error"
+                ? "Holiday sync failed. Cached data remains active."
+                : holidayLastSyncedAt
+                  ? `Last sync: ${new Date(holidayLastSyncedAt).toLocaleString()}`
+                  : "Waiting for first sync."}
+          </div>
+          <div className="pt-2 border-t mt-2 space-y-2">
+            <div className="text-xs font-medium text-slate-600">
+              Display Filters
+            </div>
+            <label className="inline-flex items-center gap-2 text-xs text-slate-700">
+              <input
+                type="checkbox"
+                className="rounded w-4 h-4"
+                checked={showNationalHolidays}
+                onChange={(event) =>
+                  onHolidayVisibilityChange("national", event.target.checked)
+                }
+              />
+              National
+            </label>
+            <label className="inline-flex items-center gap-2 text-xs text-slate-700 mt-1">
+              <input
+                type="checkbox"
+                className="rounded w-4 h-4"
+                checked={showRegionalHolidays}
+                onChange={(event) =>
+                  onHolidayVisibilityChange("regional", event.target.checked)
+                }
+              />
+              Regional
+            </label>
+            <label className="inline-flex items-center gap-2 text-xs text-slate-700 mt-1">
+              <input
+                type="checkbox"
+                className="rounded w-4 h-4"
+                checked={showOptionalHolidays}
+                onChange={(event) =>
+                  onHolidayVisibilityChange("optional", event.target.checked)
+                }
+              />
+              Optional
+            </label>
+
+            {showRegionalHolidays && (
+              <div className="mt-2 pl-2 border-l border-slate-200">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="text-[11px] text-slate-500">
+                    Regional Areas
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setRegionalAreasExpanded((previous) => !previous)
+                    }
+                    className="inline-flex items-center gap-1 px-2 py-1 text-[11px] border rounded hover:bg-slate-50"
+                  >
+                    {regionalAreasExpanded ? (
+                      <>
+                        <ChevronUp size={12} /> Hide
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown size={12} /> Show
+                      </>
+                    )}
+                  </button>
+                </div>
+                {!regionalAreasExpanded ? null : holidayRegionOptions.length ===
+                  0 ? (
+                  <div className="text-[11px] text-slate-400">
+                    No region-specific holidays found for selected country.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={onSelectAllHolidayRegions}
+                        className="px-2.5 py-1.5 text-[11px] border rounded hover:bg-slate-50"
+                      >
+                        Select All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={onClearHolidayRegions}
+                        className="px-2.5 py-1.5 text-[11px] border rounded hover:bg-slate-50"
+                      >
+                        Clear All
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={regionSearchQuery}
+                        onChange={(event) =>
+                          setRegionSearchQuery(event.target.value)
+                        }
+                        placeholder="Search region, code, or type..."
+                        className="w-full px-3 py-2 pr-8 text-xs border rounded-md"
+                      />
+                      {regionSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setRegionSearchQuery("")}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                          aria-label="Clear search"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+                    {filteredHolidayRegionOptions.length === 0 && (
+                      <div className="text-[11px] text-slate-400">
+                        No regions match your search.
+                      </div>
+                    )}
+                    <div className="space-y-3">
+                      {sortedGroupKeys.map((groupKey) => (
+                        <div key={groupKey} className="space-y-2">
+                          <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+                            {groupKey}
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                            {groupedHolidayRegionOptions[groupKey].map(
+                              (regionOption) => {
+                                const isChecked =
+                                  selectedHolidayRegions.includes(
+                                    regionOption.code,
+                                  );
+                                return (
+                                  <label
+                                    key={regionOption.code}
+                                    className={`w-full inline-flex items-center gap-2.5 border rounded-md px-3 py-1.5 text-xs transition-colors ${
+                                      isChecked
+                                        ? "bg-indigo-50 border-indigo-300 text-indigo-800"
+                                        : "bg-white border-slate-300 text-slate-700"
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      className="rounded w-4 h-4"
+                                      checked={isChecked}
+                                      onChange={(event) =>
+                                        onToggleHolidayRegion(
+                                          regionOption.code,
+                                          event.target.checked,
+                                        )
+                                      }
+                                    />
+                                    <span className="whitespace-nowrap">
+                                      {regionOption.label}
+                                    </span>
+                                  </label>
+                                );
+                              },
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {showOptionalHolidays && (
+              <div className="mt-2 pl-2 border-l border-slate-200">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="text-[11px] text-slate-500">
+                    Optional Public Holidays
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setOptionalHolidaysExpanded((previous) => !previous)
+                    }
+                    className="inline-flex items-center gap-1 px-2 py-1 text-[11px] border rounded hover:bg-slate-50"
+                  >
+                    {optionalHolidaysExpanded ? (
+                      <>
+                        <ChevronUp size={12} /> Hide
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown size={12} /> Show
+                      </>
+                    )}
+                  </button>
+                </div>
+                {!optionalHolidaysExpanded ? null : optionalHolidayOptions.length ===
+                  0 ? (
+                  <div className="text-[11px] text-slate-400">
+                    No optional holidays found for selected country.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={onSelectAllOptionalHolidays}
+                        className="px-2.5 py-1.5 text-[11px] border rounded hover:bg-slate-50"
+                      >
+                        Select All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={onClearOptionalHolidays}
+                        className="px-2.5 py-1.5 text-[11px] border rounded hover:bg-slate-50"
+                      >
+                        Clear All
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={optionalSearchQuery}
+                        onChange={(event) =>
+                          setOptionalSearchQuery(event.target.value)
+                        }
+                        placeholder="Search optional holiday..."
+                        className="w-full px-3 py-2 pr-8 text-xs border rounded-md"
+                      />
+                      {optionalSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setOptionalSearchQuery("")}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                          aria-label="Clear optional search"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+                    {filteredOptionalHolidayOptions.length === 0 && (
+                      <div className="text-[11px] text-slate-400">
+                        No optional holidays match your search.
+                      </div>
+                    )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                      {filteredOptionalHolidayOptions.map((holidayOption) => {
+                        const isChecked = selectedOptionalHolidayDates.includes(
+                          holidayOption.date,
+                        );
+                        return (
+                          <label
+                            key={holidayOption.date}
+                            className={`w-full inline-flex items-center gap-2.5 border rounded-md px-3 py-1.5 text-xs transition-colors ${
+                              isChecked
+                                ? "bg-indigo-50 border-indigo-300 text-indigo-800"
+                                : "bg-white border-slate-300 text-slate-700"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              className="rounded w-4 h-4"
+                              checked={isChecked}
+                              onChange={(event) =>
+                                onToggleOptionalHoliday(
+                                  holidayOption.date,
+                                  event.target.checked,
+                                )
+                              }
+                            />
+                            <span className="whitespace-nowrap">
+                              {holidayOption.label}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
