@@ -1,43 +1,130 @@
 {
-  "indexes": [
-    {
-      "collectionGroup": "shift_scheduler",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "team", "order": "ASCENDING" },
-        { "fieldPath": "lastUpdated", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "shift_scheduler",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "role", "order": "ASCENDING" },
-        { "fieldPath": "lastUpdated", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "shift_scheduler",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "publishedOverrides", "order": "ASCENDING" },
-        { "fieldPath": "lastPublished", "order": "DESCENDING" }
-      ]
-    }
-  ],
+  "indexes": [],
   "fieldOverrides": [
     {
       "collectionGroup": "shift_scheduler",
+      "fieldPath": "startDateStr",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "shift_scheduler",
+      "fieldPath": "holidays",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "shift_scheduler",
+      "fieldPath": "holidayCountry",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "shift_scheduler",
+      "fieldPath": "holidayLastSyncedAt",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "shift_scheduler",
+      "fieldPath": "holidayVisibility",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "shift_scheduler",
+      "fieldPath": "holidayTypeColors",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "shift_scheduler",
+      "fieldPath": "selectedHolidayRegions",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "shift_scheduler",
+      "fieldPath": "selectedOptionalHolidayDates",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "shift_scheduler",
+      "fieldPath": "minStaff",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "shift_scheduler",
+      "fieldPath": "requiredLangs",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "shift_scheduler",
+      "fieldPath": "weekendDays",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "shift_scheduler",
+      "fieldPath": "legends",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "shift_scheduler",
+      "fieldPath": "colors",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "shift_scheduler",
+      "fieldPath": "config",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "shift_scheduler",
+      "fieldPath": "hoursConfig",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "shift_scheduler",
+      "fieldPath": "featureToggles",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "shift_scheduler",
       "fieldPath": "overrides",
-      "indexes": [
-        { "order": "ASCENDING", "queryScope": "COLLECTION" },
-        { "order": "DESCENDING", "queryScope": "COLLECTION" }
-      ]
+      "indexes": []
     },
     {
       "collectionGroup": "shift_scheduler",
       "fieldPath": "requests",
-      "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION" }]
+      "indexes": []
+    },
+    {
+      "collectionGroup": "shift_scheduler",
+      "fieldPath": "publishedOverrides",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "shift_scheduler",
+      "fieldPath": "holidayTypeByDate",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "shift_scheduler",
+      "fieldPath": "holidayNameByDate",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "shift_scheduler",
+      "fieldPath": "team",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "shift_scheduler",
+      "fieldPath": "shiftOptionsByRole",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "shift_scheduler",
+      "fieldPath": "lastPublished",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "shift_scheduler",
+      "fieldPath": "lastUpdated",
+      "indexes": []
     }
   ]
 }

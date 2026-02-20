@@ -66,6 +66,24 @@ class SaveBatcher {
   private retryCount = 0;
   private maxRetries = 3;
 
+  private isRetryableError(error: unknown): boolean {
+    const code = (error as { code?: string } | null)?.code;
+    if (!code) return true;
+
+    // Firestore/Firebase transient errors that may succeed on retry
+    const retryableCodes = new Set([
+      "aborted",
+      "cancelled",
+      "deadline-exceeded",
+      "internal",
+      "resource-exhausted",
+      "unavailable",
+      "unknown",
+    ]);
+
+    return retryableCodes.has(code);
+  }
+
   // Callback to execute the actual write
   private writeCallback: ((data: SaveBatch) => Promise<void>) | null = null;
 
@@ -175,12 +193,28 @@ class SaveBatcher {
         }
       }
     } catch (error) {
-      // Batch failed - add to retry queue for processing
-      this.pendingRetries.push(dataToWrite);
+      const shouldRetry = this.isRetryableError(error);
 
       if (import.meta.env.DEV) {
-        console.error("[SaveBatcher] Initial write failed, will retry:", error);
+        console.error(
+          shouldRetry
+            ? "[SaveBatcher] Initial write failed, will retry:"
+            : "[SaveBatcher] Initial write failed with non-retryable error:",
+          error,
+        );
       }
+
+      if (!shouldRetry) {
+        this.pendingRetries = [];
+        this.retryCount = 0;
+        if (this.statusCallback) {
+          this.statusCallback("failed");
+        }
+        return;
+      }
+
+      // Batch failed - add to retry queue for processing
+      this.pendingRetries.push(dataToWrite);
 
       if (this.statusCallback) {
         this.statusCallback("retrying");
@@ -247,7 +281,23 @@ class SaveBatcher {
           }
         }
       } catch (error) {
+        const shouldRetry = this.isRetryableError(error);
         console.error("[SaveBatcher] Retry failed:", error);
+
+        if (!shouldRetry) {
+          if (import.meta.env.DEV) {
+            console.error(
+              "[SaveBatcher] Non-retryable error during retry, clearing retry queue",
+            );
+          }
+          this.pendingRetries = [];
+          this.retryCount = 0;
+          if (this.statusCallback) {
+            this.statusCallback("failed");
+          }
+          break;
+        }
+
         if (this.statusCallback) {
           this.statusCallback("retrying");
         }

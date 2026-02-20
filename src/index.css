@@ -66,3 +66,15 @@ select,
 textarea {
   font-size: 16px;
 }
+
+.holiday-number {
+  color: oklch(
+    calc(var(--holiday-l) - 42%) calc(var(--holiday-c) + 0.2) var(--holiday-h)
+  );
+}
+
+.holiday-weekday {
+  color: oklch(
+    calc(var(--holiday-l) - 35%) calc(var(--holiday-c) + 0.2) var(--holiday-h)
+  );
+}

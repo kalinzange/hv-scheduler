@@ -3056,6 +3056,54 @@ const ShiftScheduler = () => {
     [holidayTypeColors],
   );
 
+  const getHolidayOklchVars = useCallback((background?: string) => {
+    if (!background) return undefined;
+
+    const raw = background.replace("#", "").trim();
+    const hex =
+      raw.length === 3
+        ? raw
+            .split("")
+            .map((ch) => `${ch}${ch}`)
+            .join("")
+        : raw;
+    if (hex.length !== 6) return undefined;
+
+    const r8 = Number.parseInt(hex.slice(0, 2), 16);
+    const g8 = Number.parseInt(hex.slice(2, 4), 16);
+    const b8 = Number.parseInt(hex.slice(4, 6), 16);
+    if ([r8, g8, b8].some((value) => Number.isNaN(value))) return undefined;
+
+    const srgbToLinear = (c: number) =>
+      c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+
+    const r = srgbToLinear(r8 / 255);
+    const g = srgbToLinear(g8 / 255);
+    const b = srgbToLinear(b8 / 255);
+
+    const l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b;
+    const m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b;
+    const s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b;
+
+    const l_ = Math.cbrt(l);
+    const m_ = Math.cbrt(m);
+    const s_ = Math.cbrt(s);
+
+    const L = 0.2104542553 * l_ + 0.793617785 * m_ - 0.0040720468 * s_;
+    const a = 1.9779984951 * l_ - 2.428592205 * m_ + 0.4505937099 * s_;
+    const bb = 0.0259040371 * l_ + 0.7827717662 * m_ - 0.808675766 * s_;
+
+    const C = Math.sqrt(a * a + bb * bb);
+    const hue = Math.atan2(bb, a);
+    const hDeg = ((hue * 180) / Math.PI + 360) % 360;
+
+    return {
+      "--holiday-l": `${(L * 100).toFixed(2)}%`,
+      "--holiday-c": C.toFixed(4),
+      "--holiday-h": `${hDeg.toFixed(2)}deg`,
+    } as React.CSSProperties;
+  }, []);
+
   const handleClearHolidayRegions = useCallback(() => {
     setSelectedHolidayRegions([]);
   }, []);
@@ -5469,7 +5517,10 @@ const ShiftScheduler = () => {
                           } print:border-black hover:bg-gray-200`}
                           style={
                             headerHolidayBg
-                              ? { backgroundColor: headerHolidayBg }
+                              ? {
+                                  backgroundColor: headerHolidayBg,
+                                  ...getHolidayOklchVars(headerHolidayBg),
+                                }
                               : undefined
                           }
                           title={[
@@ -5481,28 +5532,10 @@ const ShiftScheduler = () => {
                             .filter(Boolean)
                             .join("\n")}
                         >
-                          <div
-                            className="text-xs md:text-xs font-bold print:text-black text-gray-700"
-                            style={
-                              day.isPtHoliday
-                                ? {
-                                    color: getHolidayTypeColor(day.holidayType),
-                                  }
-                                : undefined
-                            }
-                          >
+                          <div className="holiday-number text-xs md:text-xs font-bold print:text-black text-gray-700">
                             {day.date}
                           </div>
-                          <div
-                            className="text-[10px] md:text-xs uppercase print:text-black text-gray-500"
-                            style={
-                              day.isPtHoliday
-                                ? {
-                                    color: getHolidayTypeColor(day.holidayType),
-                                  }
-                                : undefined
-                            }
-                          >
+                          <div className="holiday-weekday text-[10px] md:text-xs uppercase print:text-black text-gray-500">
                             {day.weekDay}
                           </div>
                         </th>

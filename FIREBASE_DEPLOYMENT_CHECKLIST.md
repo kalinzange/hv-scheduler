@@ -88,10 +88,20 @@ Complete this checklist in order to deploy Firebase Functions with secure authen
   firebase deploy --only firestore:rules
   ```
 
+- [ ] **Deploy Firestore indexes/field overrides**
+
+  ```bash
+  firebase deploy --only firestore:indexes
+  ```
+
 - [ ] **Verify rules deployment**
   - Go to Firebase Console → Firestore → Rules
   - Check that `lastPublished` is in the validation
   - Check that `hasWriteAccess()` requires `role in ['manager', 'admin']`
+
+- [ ] **Verify index exemptions deployment**
+  - Go to Firebase Console → Firestore → Indexes → Single field
+  - Confirm exemptions exist for large fields in `shift_scheduler` (for example `overrides`, `publishedOverrides`, `holidayTypeByDate`, `holidayNameByDate`, `team`, `requests`)
 
 ## Step 4: Deploy Functions
 
@@ -143,7 +153,6 @@ Complete this checklist in order to deploy Firebase Functions with secure authen
 ### GitHub Actions (Production)
 
 - [ ] **Add GitHub Secret: VITE_CLOUD_FUNCTION_URL**
-
   1. Go to GitHub repo → Settings → Secrets and variables → Actions
   2. Click "New repository secret"
   3. Name: `VITE_CLOUD_FUNCTION_URL`
@@ -167,20 +176,17 @@ Complete this checklist in order to deploy Firebase Functions with secure authen
   ```
 
 - [ ] **Test Manager login**
-
   1. Open http://localhost:5173/hv-scheduler/
   2. Click "Login as Manager"
   3. Enter manager password
   4. Should successfully log in
 
 - [ ] **Test Admin login**
-
   1. Click "Login as Admin"
   2. Enter admin password
   3. Should successfully log in
 
 - [ ] **Check browser console** for errors
-
   - No CORS errors
   - No 401/403 errors
   - Custom token successfully created
@@ -213,7 +219,6 @@ Complete this checklist in order to deploy Firebase Functions with secure authen
   ```
 
 - [ ] **Wait for GitHub Actions**
-
   - Go to Actions tab in GitHub
   - Watch deployment workflow
   - Should complete successfully
@@ -239,7 +244,6 @@ Complete this checklist in order to deploy Firebase Functions with secure authen
   ```
 
 - [ ] **Verify custom claims**
-
   - Login as Manager
   - Open browser DevTools → Application → IndexedDB
   - Find Firebase Auth token
@@ -256,17 +260,14 @@ Complete this checklist in order to deploy Firebase Functions with secure authen
 ## Step 9: Security Verification
 
 - [ ] **Verify rate limiting works**
-
   - Try wrong password 5+ times
   - Should get locked out
 
 - [ ] **Verify CORS headers**
-
   - Check Network tab in DevTools
   - Response should have `Access-Control-Allow-Origin` header
 
 - [ ] **Verify password hashes are secret**
-
   - Check GitHub repository
   - Ensure `.env` is not committed
   - Ensure `functions/.env` is in `.gitignore`
@@ -338,17 +339,14 @@ If something goes wrong:
 ## Post-Deployment
 
 - [ ] **Document passwords securely**
-
   - Store in password manager
   - Share with team securely (1Password, LastPass, etc.)
 
 - [ ] **Set up monitoring** (optional)
-
   - Firebase Console → Functions → Metrics
   - Set up alerts for errors
 
 - [ ] **Update documentation**
-
   - Document function URL in team wiki
   - Share deployment guide with team
 
