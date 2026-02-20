@@ -5523,14 +5523,7 @@ const ShiftScheduler = () => {
                                 }
                               : undefined
                           }
-                          title={[
-                            isSelected
-                              ? "Selected - Shift+Click to extend, Ctrl+Click to deselect"
-                              : "Click to focus, Ctrl+Click to add, Shift+Click for range",
-                            day.holidayTooltip || "",
-                          ]
-                            .filter(Boolean)
-                            .join("\n")}
+                          title={day.holidayTooltip || ""}
                         >
                           <div className="holiday-number text-xs md:text-xs font-bold print:text-black text-gray-700">
                             {day.date}
