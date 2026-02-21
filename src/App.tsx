@@ -1091,40 +1091,89 @@ const ConfigPanel = ({
                     placeholder="Línguas (ex: EN, PT)"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-[10px] text-gray-600 mb-1">
-                      {t.hireDate}
-                    </label>
-                    <input
-                      type="date"
-                      className="w-full border p-1 rounded"
-                      value={emp.hireDate || ""}
-                      onChange={(e) =>
-                        updateEmp(
-                          emp.id,
-                          "hireDate",
-                          e.target.value || undefined,
-                        )
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-gray-600 mb-1">
-                      {t.leaveDate}
-                    </label>
-                    <input
-                      type="date"
-                      className="w-full border p-1 rounded"
-                      value={emp.leaveDate || ""}
-                      onChange={(e) =>
-                        updateEmp(
-                          emp.id,
-                          "leaveDate",
-                          e.target.value || undefined,
-                        )
-                      }
-                    />
+                <div>
+                  <label className="block text-[10px] text-gray-600 mb-1 font-semibold">
+                    Employment Periods
+                  </label>
+                  <div className="space-y-2">
+                    {(emp.employmentPeriods || []).map((period, pIdx) => (
+                      <div
+                        key={pIdx}
+                        className="grid grid-cols-2 gap-2 p-2 bg-gray-50 rounded border border-gray-200"
+                      >
+                        <div>
+                          <label className="block text-[9px] text-gray-500 mb-0.5">
+                            Hire
+                          </label>
+                          <input
+                            type="date"
+                            className="w-full border p-1 rounded text-xs"
+                            value={period.hireDate || ""}
+                            onChange={(e) => {
+                              const newPeriods = [
+                                ...(emp.employmentPeriods || []),
+                              ];
+                              newPeriods[pIdx] = {
+                                ...period,
+                                hireDate: e.target.value,
+                              };
+                              updateEmp(
+                                emp.id,
+                                "employmentPeriods",
+                                newPeriods,
+                              );
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] text-gray-500 mb-0.5">
+                            Leave (optional)
+                          </label>
+                          <input
+                            type="date"
+                            className="w-full border p-1 rounded text-xs"
+                            value={period.leaveDate || ""}
+                            onChange={(e) => {
+                              const newPeriods = [
+                                ...(emp.employmentPeriods || []),
+                              ];
+                              newPeriods[pIdx] = {
+                                ...period,
+                                leaveDate: e.target.value || undefined,
+                              };
+                              updateEmp(
+                                emp.id,
+                                "employmentPeriods",
+                                newPeriods,
+                              );
+                            }}
+                          />
+                        </div>
+                        <button
+                          onClick={() => {
+                            const newPeriods = (
+                              emp.employmentPeriods || []
+                            ).filter((_, i) => i !== pIdx);
+                            updateEmp(emp.id, "employmentPeriods", newPeriods);
+                          }}
+                          className="col-span-2 py-1 px-2 text-xs text-red-600 hover:bg-red-50 border border-red-200 rounded font-medium"
+                        >
+                          Remove Period
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => {
+                        const newPeriods = [...(emp.employmentPeriods || [])];
+                        newPeriods.push({
+                          hireDate: new Date().toISOString().split("T")[0],
+                        });
+                        updateEmp(emp.id, "employmentPeriods", newPeriods);
+                      }}
+                      className="w-full py-1 px-2 text-xs text-green-700 hover:bg-green-50 border border-green-200 rounded font-medium bg-green-50"
+                    >
+                      + Add Period
+                    </button>
                   </div>
                 </div>
               </div>
@@ -3198,14 +3247,27 @@ const ShiftScheduler = () => {
 
       // Employee filter: if empFilter is not empty, only show selected employees
       const empMatch = empFilter.length === 0 || empFilter.includes(emp.id);
+
+      // Check employment periods for the visible month
       const visibleMonthKey = `${currentDate.getFullYear()}-${String(
         currentDate.getMonth() + 1,
       ).padStart(2, "0")}`;
-      const hireMonth = emp.hireDate?.slice(0, 7);
-      const leaveMonth = emp.leaveDate?.slice(0, 7);
-      const isBeforeHire = !!hireMonth && visibleMonthKey < hireMonth;
-      const isAfterLeave = !!leaveMonth && visibleMonthKey >= leaveMonth;
-      const isWithinEmploymentWindow = !isBeforeHire && !isAfterLeave;
+
+      // Support both new employmentPeriods array and legacy hireDate/leaveDate
+      let periods = emp.employmentPeriods ?? [];
+      if (emp.hireDate && periods.length === 0) {
+        periods = [{ hireDate: emp.hireDate, leaveDate: emp.leaveDate }];
+      }
+
+      const isWithinEmploymentWindow =
+        periods.length === 0 ||
+        periods.some((period) => {
+          const hireMonth = period.hireDate.slice(0, 7);
+          const leaveMonth = period.leaveDate?.slice(0, 7);
+          const isBeforeHire = visibleMonthKey < hireMonth;
+          const isAfterLeave = !!leaveMonth && visibleMonthKey >= leaveMonth;
+          return !isBeforeHire && !isAfterLeave;
+        });
 
       return (
         roleMatch &&

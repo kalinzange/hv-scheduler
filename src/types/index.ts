@@ -39,6 +39,11 @@ export interface RotationConfig {
   autoAdjustOffs: boolean;
 }
 
+export interface EmploymentPeriod {
+  hireDate: string; // YYYY-MM-DD
+  leaveDate?: string; // YYYY-MM-DD or undefined if current
+}
+
 export interface Employee {
   id: number;
   name: string;
@@ -46,6 +51,8 @@ export interface Employee {
   languages: Language[];
   password?: string;
   requirePasswordChange?: boolean;
+  employmentPeriods?: EmploymentPeriod[]; // Multiple hire/leave periods
+  // Backwards compatibility (derived from latest period)
   hireDate?: string;
   leaveDate?: string;
 }
