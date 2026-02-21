@@ -3952,7 +3952,11 @@ const ShiftScheduler = () => {
         if (s === "N") {
           n++;
           hours += hoursConfig.N;
-          extraHours += 7;
+          if (isSpecialDay) {
+            extraHours += 8;
+          } else {
+            extraHours += 7;
+          }
         }
         if (s === "V") v++;
         if (["M", "T", "N"].includes(s)) {
