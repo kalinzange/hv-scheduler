@@ -50,79 +50,90 @@ export const StatsModal: React.FC<StatsModalProps> = ({
             <X size={20} />
           </button>
         </div>
-        <div className="overflow-auto flex-1">
-          <div className="p-4">
-            <table className="w-full text-sm border-collapse">
-              <thead className="sticky top-0 z-10">
-                <tr className="bg-gray-100 text-left">
-                  <th className="p-2 border bg-gray-100">{t.statName}</th>
-                  <th className="p-2 border text-center bg-green-50">
-                    {t.statM}
-                  </th>
-                  <th className="p-2 border text-center bg-orange-50">
-                    {t.statT}
-                  </th>
-                  <th className="p-2 border text-center bg-blue-50">
-                    {t.statN}
-                  </th>
-                  <th className="p-2 border text-center bg-purple-50">
-                    {t.statWE}
-                  </th>
-                  <th className="p-2 border text-center bg-pink-50">
-                    {t.statV}
-                  </th>
-                  <th className="p-2 border text-center font-bold bg-gray-100">
-                    {t.statTotal}
-                  </th>
-                  <th className="p-2 border text-center bg-yellow-50 font-bold">
-                    {t.statHours}
-                  </th>
-                  <th className="p-2 border text-center bg-indigo-50 font-bold">
-                    {t.statExtraHours}
-                  </th>
-                  <th className="p-2 border text-center bg-gray-200 font-bold">
-                    {t.statBalance}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.map((row) => {
-                  const balance = row.Hours - hoursConfig.target;
-                  return (
-                    <tr key={row.name} className="hover:bg-gray-50 border-b">
-                      <td className="p-2 border font-medium">{row.name}</td>
-                      <td className="p-2 border text-center">{row.M}</td>
-                      <td className="p-2 border text-center">{row.T}</td>
-                      <td className="p-2 border text-center">{row.N}</td>
-                      <td className="p-2 border text-center font-bold text-purple-700">
-                        {row.WE}
-                      </td>
-                      <td className="p-2 border text-center text-pink-600">
-                        {row.V}
-                      </td>
-                      <td className="p-2 border text-center font-bold">
-                        {row.Total}
-                      </td>
-                      <td className="p-2 border text-center bg-yellow-50 font-mono">
-                        {row.Hours}h
-                      </td>
-                      <td className="p-2 border text-center bg-indigo-50 font-mono font-bold text-indigo-700">
-                        {row.ExtraHours}h
-                      </td>
-                      <td
-                        className={`p-2 border text-center font-bold font-mono ${
-                          balance >= 0 ? "text-green-600" : "text-red-600"
-                        }`}
-                      >
-                        {balance > 0 ? "+" : ""}
-                        {balance}h
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+        <div className="overflow-auto flex-1 mt-4 px-4 pb-4">
+          <table className="w-full text-sm border-collapse border border-gray-300">
+            <thead className="relative z-30">
+              <tr className="text-left">
+                <th className="relative p-2 border border-t border-gray-300 sticky top-0 z-30 bg-gray-100 shadow-[inset_0_1px_0_0_#d1d5db]">
+                  {t.statName}
+                </th>
+                <th className="relative p-2 border border-t border-gray-300 text-center sticky top-0 z-30 bg-green-50 shadow-[inset_0_1px_0_0_#d1d5db]">
+                  {t.statM}
+                </th>
+                <th className="relative p-2 border border-t border-gray-300 text-center sticky top-0 z-30 bg-orange-50 shadow-[inset_0_1px_0_0_#d1d5db]">
+                  {t.statT}
+                </th>
+                <th className="relative p-2 border border-t border-gray-300 text-center sticky top-0 z-30 bg-blue-50 shadow-[inset_0_1px_0_0_#d1d5db]">
+                  {t.statN}
+                </th>
+                <th className="relative p-2 border border-t border-gray-300 text-center sticky top-0 z-30 bg-purple-50 shadow-[inset_0_1px_0_0_#d1d5db]">
+                  {t.statWE}
+                </th>
+                <th className="relative p-2 border border-t border-gray-300 text-center sticky top-0 z-30 bg-pink-50 shadow-[inset_0_1px_0_0_#d1d5db]">
+                  {t.statV}
+                </th>
+                <th className="relative p-2 border border-t border-gray-300 text-center font-bold sticky top-0 z-30 bg-gray-100 shadow-[inset_0_1px_0_0_#d1d5db]">
+                  {t.statTotal}
+                </th>
+                <th className="relative p-2 border border-t border-gray-300 text-center font-bold sticky top-0 z-30 bg-yellow-50 shadow-[inset_0_1px_0_0_#d1d5db]">
+                  {t.statHours}
+                </th>
+                <th className="relative p-2 border border-t border-gray-300 text-center font-bold sticky top-0 z-30 bg-indigo-50 shadow-[inset_0_1px_0_0_#d1d5db]">
+                  {t.statExtraHours}
+                </th>
+                <th className="relative p-2 border border-t border-gray-300 text-center font-bold sticky top-0 z-30 bg-gray-200 shadow-[inset_0_1px_0_0_#d1d5db]">
+                  {t.statBalance}
+                </th>
+              </tr>
+            </thead>
+            <tbody className="relative z-0">
+              {data.map((row) => {
+                const balance = row.Hours - hoursConfig.target;
+                return (
+                  <tr
+                    key={row.name}
+                    className="bg-white hover:bg-gray-200 border-b border-gray-300"
+                  >
+                    <td className="p-2 border border-gray-300 font-medium">
+                      {row.name}
+                    </td>
+                    <td className="p-2 border border-gray-300 text-center">
+                      {row.M}
+                    </td>
+                    <td className="p-2 border border-gray-300 text-center">
+                      {row.T}
+                    </td>
+                    <td className="p-2 border border-gray-300 text-center">
+                      {row.N}
+                    </td>
+                    <td className="p-2 border border-gray-300 text-center font-bold text-purple-700">
+                      {row.WE}
+                    </td>
+                    <td className="p-2 border border-gray-300 text-center text-pink-600">
+                      {row.V}
+                    </td>
+                    <td className="p-2 border border-gray-300 text-center font-bold">
+                      {row.Total}
+                    </td>
+                    <td className="p-2 border border-gray-300 text-center bg-yellow-50 font-mono">
+                      {row.Hours}h
+                    </td>
+                    <td className="p-2 border border-gray-300 text-center bg-indigo-50 font-mono font-bold text-indigo-700">
+                      {row.ExtraHours}h
+                    </td>
+                    <td
+                      className={`p-2 border border-gray-300 text-center font-bold font-mono ${
+                        balance >= 0 ? "text-green-600" : "text-red-600"
+                      }`}
+                    >
+                      {balance > 0 ? "+" : ""}
+                      {balance}h
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
         <div className="p-3 border-t bg-gray-50 flex justify-between items-center text-xs text-gray-500">
           <span>

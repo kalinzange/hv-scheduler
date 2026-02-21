@@ -3839,7 +3839,10 @@ const ShiftScheduler = () => {
         extraHours = 0;
       calendarData.forEach((day) => {
         const s = day.shifts[emp.id];
-        const isSpecialDay = day.isWeekend || day.isPtHoliday;
+        const isSpecialDay =
+          day.isWeekend ||
+          day.holidayType === "national" ||
+          day.holidayType === "municipal";
         if (s === "M") {
           m++;
           hours += hoursConfig.M;
