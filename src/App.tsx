@@ -726,7 +726,6 @@ const ConfigPanel = ({
       offset: 0,
       password: hashedPassword,
       requirePasswordChange: true,
-      rotationMode: "STANDARD",
     };
     setTeam([...team, newEmp]);
   };
@@ -1100,18 +1099,6 @@ const ConfigPanel = ({
                     placeholder="Línguas (ex: EN, PT)"
                   />
                 </div>
-                <select
-                  value={emp.rotationMode || "STANDARD"}
-                  onChange={(e) =>
-                    updateEmp(emp.id, "rotationMode", e.target.value)
-                  }
-                  className="w-full border p-1 rounded bg-gray-50"
-                >
-                  <option value="STANDARD">{t.modeStandard}</option>
-                  <option value="FIXED_M">{t.modeFixedM}</option>
-                  <option value="FIXED_T">{t.modeFixedT}</option>
-                  <option value="FIXED_N">{t.modeFixedN}</option>
-                </select>
               </div>
             </div>
           ))}
@@ -5597,12 +5584,6 @@ const ShiftScheduler = () => {
                             <span className="text-indigo-600 font-mono">
                               [{emp.languages.join(" ")}]
                             </span>
-                            {emp.rotationMode &&
-                              emp.rotationMode !== "STANDARD" && (
-                                <span className="text-orange-600 font-bold ml-1">
-                                  ({emp.rotationMode.replace("FIXED_", "")})
-                                </span>
-                              )}
                           </div>
                         </td>
                         {calendarData.map((day, dIdx) => {

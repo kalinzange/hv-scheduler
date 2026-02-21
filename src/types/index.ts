@@ -3,7 +3,6 @@
 export type ShiftType = "M" | "T" | "N" | "F";
 export type OverrideType = ShiftType | "V" | "S"; // V=Vacation, S=Sick
 export type Language = "EN" | "DE" | "IT" | "FR" | "PT" | "TR" | "ES";
-export type RotationMode = "STANDARD" | "FIXED_M" | "FIXED_T" | "FIXED_N";
 export type RequestStatus = "PENDING" | "APPROVED" | "REJECTED";
 export type LangCode = "en";
 export type SortOrder = "AZ" | "ZA" | "ROLE";
@@ -48,7 +47,6 @@ export interface Employee {
   offset: number;
   password?: string;
   requirePasswordChange?: boolean;
-  rotationMode?: RotationMode;
 }
 
 export interface ShiftRequest {
