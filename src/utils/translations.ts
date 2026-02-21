@@ -149,5 +149,7 @@ export const TRANSLATIONS: Record<"en", Translations> = {
     noPendingSelections: "No pending selections to submit.",
     requestsSubmitted: "request(s) submitted for approval!",
     clearPendingSelections: "Clear Pending",
+    hireDate: "Hire Date",
+    leaveDate: "Leave Date",
   },
 };

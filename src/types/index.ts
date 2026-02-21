@@ -46,6 +46,8 @@ export interface Employee {
   languages: Language[];
   password?: string;
   requirePasswordChange?: boolean;
+  hireDate?: string;
+  leaveDate?: string;
 }
 
 export interface ShiftRequest {

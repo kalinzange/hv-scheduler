@@ -12,6 +12,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Calendar,
+  AlertCircle,
   AlertTriangle,
   CheckCircle,
   Settings,
@@ -19,6 +20,7 @@ import {
   ArrowDownAZ,
   X,
   Clock,
+  Shield,
   ShieldAlert,
   BarChart3,
   Palette,
@@ -30,8 +32,7 @@ import {
   Filter,
   MoreHorizontal,
   RefreshCw,
-  AlertCircle,
-  Shield,
+  CloudOff,
   Eye,
   Edit3,
   Inbox,
@@ -40,7 +41,6 @@ import {
   Layers,
   Plus,
   Cloud,
-  CloudOff,
   Loader2,
   Undo,
   Redo,
@@ -1090,6 +1090,42 @@ const ConfigPanel = ({
                     onChange={(e) => handleLangChange(emp.id, e.target.value)}
                     placeholder="Línguas (ex: EN, PT)"
                   />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] text-gray-600 mb-1">
+                      {t.hireDate}
+                    </label>
+                    <input
+                      type="date"
+                      className="w-full border p-1 rounded"
+                      value={emp.hireDate || ""}
+                      onChange={(e) =>
+                        updateEmp(
+                          emp.id,
+                          "hireDate",
+                          e.target.value || undefined,
+                        )
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-gray-600 mb-1">
+                      {t.leaveDate}
+                    </label>
+                    <input
+                      type="date"
+                      className="w-full border p-1 rounded"
+                      value={emp.leaveDate || ""}
+                      onChange={(e) =>
+                        updateEmp(
+                          emp.id,
+                          "leaveDate",
+                          e.target.value || undefined,
+                        )
+                      }
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -3162,8 +3198,22 @@ const ShiftScheduler = () => {
 
       // Employee filter: if empFilter is not empty, only show selected employees
       const empMatch = empFilter.length === 0 || empFilter.includes(emp.id);
+      const visibleMonthKey = `${currentDate.getFullYear()}-${String(
+        currentDate.getMonth() + 1,
+      ).padStart(2, "0")}`;
+      const hireMonth = emp.hireDate?.slice(0, 7);
+      const leaveMonth = emp.leaveDate?.slice(0, 7);
+      const isBeforeHire = !!hireMonth && visibleMonthKey < hireMonth;
+      const isAfterLeave = !!leaveMonth && visibleMonthKey >= leaveMonth;
+      const isWithinEmploymentWindow = !isBeforeHire && !isAfterLeave;
 
-      return roleMatch && langMatch && shiftMatch && empMatch;
+      return (
+        roleMatch &&
+        langMatch &&
+        shiftMatch &&
+        empMatch &&
+        isWithinEmploymentWindow
+      );
     });
 
     if (sortOrder === "AZ") {
@@ -3206,6 +3256,7 @@ const ShiftScheduler = () => {
     shiftFilter,
     empFilter,
     sortOrder,
+    currentDate,
     startDateStr,
     effectiveOverrides,
     selectedDates,
