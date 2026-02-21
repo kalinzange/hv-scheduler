@@ -78,3 +78,7 @@ textarea {
     calc(var(--holiday-l) - 35%) calc(var(--holiday-c) + 0.2) var(--holiday-h)
   );
 }
+
+.regular-weekday {
+  color: oklch(0.551 0.027 264.364);
+}

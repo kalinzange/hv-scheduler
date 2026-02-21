@@ -176,6 +176,9 @@ const checkShiftOverflow = (
   return { hasShiftOverflow, startIdx };
 };
 
+const normalizeTeamOffsets = (team: Employee[]): Employee[] =>
+  team.map((emp) => ({ ...emp, offset: 0 }));
+
 // --- TOKEN VALIDATION HELPERS ---
 
 /**
@@ -723,6 +726,7 @@ const ConfigPanel = ({
       name: "Novo Colaborador",
       role: "GCC",
       languages: ["EN"],
+      offset: 0,
       password: hashedPassword,
       requirePasswordChange: true,
     };
@@ -1442,7 +1446,9 @@ const ShiftScheduler = () => {
     N: 8,
     target: 160,
   });
-  const [teamState, setTeamState] = useState<Employee[]>(INITIAL_TEAM);
+  const [teamState, setTeamState] = useState<Employee[]>(() =>
+    normalizeTeamOffsets(INITIAL_TEAM),
+  );
   const [requests, setRequests] = useState<ShiftRequest[]>([]);
   // Track pending selections for editors before submission
   const [pendingSelections, setPendingSelections] = useState<
@@ -1600,8 +1606,9 @@ const ShiftScheduler = () => {
 
               updateLoadingPhase("Loading team data...");
               if (data.team) {
-                setTeamState(data.team);
-                cacheStore.saveTeamData(data.team).catch((err) => {
+                const normalizedTeam = normalizeTeamOffsets(data.team);
+                setTeamState(normalizedTeam);
+                cacheStore.saveTeamData(normalizedTeam).catch((err) => {
                   console.warn("[Cache] Failed to cache team data:", err);
                 });
               }
@@ -5508,9 +5515,7 @@ const ShiftScheduler = () => {
                           <div className="holiday-number text-xs md:text-xs font-bold print:text-black text-gray-700">
                             {day.date}
                           </div>
-                          <div
-                            className={`${headerHolidayBg ? "holiday-weekday" : "regular-weekday"} text-[10px] md:text-xs uppercase print:text-black`}
-                          >
+                          <div className="holiday-weekday text-[10px] md:text-xs uppercase print:text-black text-gray-500">
                             {day.weekDay}
                           </div>
                         </th>
