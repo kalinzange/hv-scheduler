@@ -126,7 +126,6 @@ firebase deploy --only functions
 - Role-based access control
 - Secure environment variable management
 - Firestore security rules
-- Audit logging for compliance
 
 ## Configuration
 

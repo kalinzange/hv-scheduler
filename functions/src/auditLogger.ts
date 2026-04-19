@@ -1,3 +1,4 @@
+/*
 import * as functions from "firebase-functions";
 import * as crypto from "crypto";
 import { admin } from "./admin";
@@ -88,3 +89,4 @@ export const onGlobalStateUpdate = functions.firestore
       // Don't fail the write if audit logging fails
     }
   });
+*/
