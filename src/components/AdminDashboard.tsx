@@ -90,6 +90,7 @@ const EDITOR_SHIFT_OPTIONS: Array<{ id: OverrideType; label: string }> = [
   { id: "F", label: "Day Off (F)" },
   { id: "V", label: "Vacation (V)" },
   { id: "S", label: "Sick Leave (S)" },
+  { id: "TR", label: "Training (TR)" },
 ];
 
 interface AdminDashboardProps {

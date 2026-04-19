@@ -1,7 +1,7 @@
 // --- TYPE DEFINITIONS ---
 
 export type ShiftType = "M" | "T" | "N" | "F";
-export type OverrideType = ShiftType | "V" | "S"; // V=Vacation, S=Sick
+export type OverrideType = ShiftType | "V" | "S" | "TR"; // V=Vacation, S=Sick, TR=Training
 export type Language = "EN" | "DE" | "IT" | "FR" | "PT" | "TR" | "ES";
 export type RequestStatus = "PENDING" | "APPROVED" | "REJECTED";
 export type LangCode = "en";
@@ -85,7 +85,7 @@ export interface HoursConfig {
 }
 
 export interface ShiftLegend {
-  code: ShiftType | "V" | "S" | "F";
+  code: ShiftType | "V" | "S" | "F" | "TR";
   label: string;
   hours?: number;
 }

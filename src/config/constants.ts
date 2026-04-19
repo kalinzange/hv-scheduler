@@ -107,7 +107,7 @@ export const DEFAULT_FEATURE_TOGGLES: FeatureToggles = {
 export const DEFAULT_SHIFT_OPTIONS_BY_ROLE: ShiftOptionsByRole = {
   viewer: ["F", "V", "S"],
   editor: ["F", "V", "S"],
-  manager: ["M", "T", "N", "F", "V", "S"],
+  manager: ["M", "T", "N", "F", "V", "S", "TR"],
 };
 
 // --- CONSTANTS ---

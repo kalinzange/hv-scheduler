@@ -35,11 +35,11 @@ interface ValidationResponse {
   warnings?: string[];
 }
 
-const ALLOWED_SHIFT_TYPES = ["M", "T", "N", "F", "V", "S"] as const;
+const ALLOWED_SHIFT_TYPES = ["M", "T", "N", "F", "V", "S", "TR"] as const;
 const DEFAULT_ROLE_SHIFT_OPTIONS: Record<string, string[]> = {
   viewer: ["F", "V", "S"],
   editor: ["F", "V", "S"],
-  manager: ["M", "T", "N", "F", "V", "S"],
+  manager: ["M", "T", "N", "F", "V", "S", "TR"],
 };
 
 const getAllowedShiftTypesForRole = async (

@@ -273,7 +273,7 @@ const BulkActionModal = ({
 
   const isManager = currentUser.role === "manager";
   const isEditor = currentUser.role === "editor";
-  const allShiftOptions: OverrideType[] = ["M", "T", "N", "F", "V", "S"];
+  const allShiftOptions: OverrideType[] = ["M", "T", "N", "F", "V", "S", "TR"];
   const roleKey = currentUser.role as NonAdminRoleId;
   const allowedShiftOptions: OverrideType[] =
     currentUser.role === "admin"
@@ -391,6 +391,18 @@ const BulkActionModal = ({
                   }`}
                 >
                   N
+                </button>
+              )}
+              {allowedShiftSet.has("TR") && (
+                <button
+                  onClick={() => setShiftType("TR")}
+                  className={`p-2 rounded border text-sm font-bold ${
+                    shiftType === "TR"
+                      ? "bg-indigo-100 border-indigo-500 text-indigo-800"
+                      : "bg-white text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  TR
                 </button>
               )}
               {allowedShiftSet.has("F") && (
@@ -600,13 +612,18 @@ const CellEditor = ({
       icon: <Stethoscope size={14} />,
       color: customColors.S,
     },
+    {
+      id: "TR",
+      label: "Training",
+      color: customColors.TR,
+    },
   ];
   const roleKey = currentUserRole as NonAdminRoleId;
   const allowedShiftOptions: OverrideType[] =
     currentUserRole === "admin"
-      ? (["M", "T", "N", "F", "V", "S"] as OverrideType[])
+      ? (["M", "T", "N", "F", "V", "S", "TR"] as OverrideType[])
       : (shiftOptionsByRole?.[roleKey] as OverrideType[]) ||
-        (["M", "T", "N", "F", "V", "S"] as OverrideType[]);
+        (["M", "T", "N", "F", "V", "S", "TR"] as OverrideType[]);
   const options = allOptions.filter((opt) =>
     allowedShiftOptions.includes(opt.id as OverrideType),
   );
@@ -1005,7 +1022,7 @@ const ConfigPanel = ({
         </h4>
         <div className="overflow-x-auto">
           <div className="space-y-2">
-            {["M", "T", "N", "F", "V", "S"].map((type) => (
+            {["M", "T", "N", "F", "V", "S", "TR"].map((type) => (
               <div key={type} className="flex items-center gap-1 min-w-[400px]">
                 <input
                   type="color"
@@ -1025,7 +1042,7 @@ const ConfigPanel = ({
                   }
                   className="flex-1 p-1 border rounded text-xs"
                 />
-                {["F", "V", "S"].includes(type) && (
+                {["F", "V", "S", "TR"].includes(type) && (
                   <span className="text-xs text-gray-500 flex-1">
                     {t[`leg${type}` as keyof typeof t]}
                   </span>
@@ -1335,7 +1352,7 @@ const ShiftScheduler = () => {
   const normalizeShiftOptionsByRole = (
     incoming?: unknown,
   ): ShiftOptionsByRole => {
-    const allowed = new Set(["M", "T", "N", "F", "V", "S"]);
+    const allowed = new Set(["M", "T", "N", "F", "V", "S", "TR"]);
     const roles: NonAdminRoleId[] = ["viewer", "editor", "manager"];
     const defaults = DEFAULT_SHIFT_OPTIONS_BY_ROLE;
 
@@ -1355,7 +1372,9 @@ const ShiftScheduler = () => {
           unique.push(item as OverrideType);
         }
       });
-      normalized[role] = unique;
+      normalized[role] = Array.from(
+        new Set([...(defaults[role] || []), ...unique]),
+      );
     });
 
     return normalized;
@@ -1461,6 +1480,7 @@ const ShiftScheduler = () => {
     M: "07:00 - 16:00",
     T: "15:00 - 00:00",
     N: "23:00 - 08:00",
+    TR: "Training",
   });
   const [colors, setColors] = useState<any>({
     M: "#d1fae5",
@@ -1469,6 +1489,7 @@ const ShiftScheduler = () => {
     F: "#f3f4f6",
     V: "#fbcfe8",
     S: "#e5e7eb",
+    TR: "#f3d375",
   });
   const [overrides, setOverrides] = useState<Record<string, OverrideType>>({});
   const [undoHistory, setUndoHistory] = useState<

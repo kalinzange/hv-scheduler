@@ -44,6 +44,7 @@ export const TRANSLATIONS: Record<"en", Translations> = {
     legF: "Day Off",
     legV: "Vacation",
     legS: "Sick Leave",
+    legTR: "Training",
     altActive: "* Alternating 2/3 days active",
     fixed2: "* Fixed 2 days",
     autoCalcInfo: "Auto M/T Offs: < 5 days = 1 Off; ≥ 5 days = 2 Offs.",
