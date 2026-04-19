@@ -3600,7 +3600,13 @@ const ShiftScheduler = () => {
         T: new Set<Language>(),
         N: new Set<Language>(),
       };
+      const roleCoverage = {
+        M: new Set<string>(),
+        T: new Set<string>(),
+        N: new Set<string>(),
+      };
       const counts = { M: 0, T: 0, N: 0 };
+      const REQUIRED_ROLES = ["GCC", "Field Dispatch", "Remote Ops"];
 
       teamState.forEach((emp) => {
         const overrideKey = `${emp.id}_${dateStr}`;
@@ -3614,14 +3620,34 @@ const ShiftScheduler = () => {
         const shift = effectiveOverrides[overrideKey] || "F";
         shifts[emp.id] = shift;
 
-        // Exclude Remote Ops role from language coverage analysis
-        if (["M", "T", "N"].includes(shift) && emp.role !== "Remote Ops") {
-          emp.languages.forEach((lang) =>
-            coverage[shift as "M" | "T" | "N"].add(lang),
-          );
-          counts[shift as "M" | "T" | "N"]++;
+        // Track coverage for all shifts
+        if (["M", "T", "N"].includes(shift)) {
+          const shiftType = shift as "M" | "T" | "N";
+          counts[shiftType]++;
+          roleCoverage[shiftType].add(emp.role);
+
+          // Only add to language coverage if not Remote Ops
+          if (emp.role !== "Remote Ops") {
+            emp.languages.forEach((lang) => coverage[shiftType].add(lang));
+          }
         }
       });
+
+      // Find which required roles are missing from which shifts
+      const missingRolesPerShift = {
+        M: REQUIRED_ROLES.filter((role) => !roleCoverage.M.has(role)),
+        T: REQUIRED_ROLES.filter((role) => !roleCoverage.T.has(role)),
+        N: REQUIRED_ROLES.filter((role) => !roleCoverage.N.has(role)),
+      };
+
+      // Collect all unique missing roles across all shifts
+      const allMissingRoles = Array.from(
+        new Set([
+          ...missingRolesPerShift.M,
+          ...missingRolesPerShift.T,
+          ...missingRolesPerShift.N,
+        ]),
+      );
 
       const missing = {
         M: requiredLangs.filter((l) => !coverage.M.has(l)),
@@ -3649,6 +3675,8 @@ const ShiftScheduler = () => {
         holidayTooltip: (holidayInfo.tooltipLines || []).join("\n"),
         shifts,
         missing,
+        missingRoles: missingRolesPerShift,
+        allMissingRoles,
         lowStaff,
         counts,
         pendingReqs,
@@ -3659,7 +3687,8 @@ const ShiftScheduler = () => {
           missing.N.length > 0 ||
           lowStaff.M ||
           lowStaff.T ||
-          lowStaff.N,
+          lowStaff.N ||
+          allMissingRoles.length > 0,
       });
     }
     // If requested, append a number of days from the next month so the table
@@ -3685,7 +3714,13 @@ const ShiftScheduler = () => {
           T: new Set<Language>(),
           N: new Set<Language>(),
         };
+        const roleCoverage = {
+          M: new Set<string>(),
+          T: new Set<string>(),
+          N: new Set<string>(),
+        };
         const counts = { M: 0, T: 0, N: 0 };
+        const REQUIRED_ROLES = ["GCC", "Field Dispatch", "Remote Ops"];
 
         teamState.forEach((emp) => {
           const overrideKey = `${emp.id}_${dateStr}`;
@@ -3701,14 +3736,34 @@ const ShiftScheduler = () => {
             shift = "F"; // Default to day off - manual scheduling only
           }
           shifts[emp.id] = shift;
-          // Exclude Remote Ops role from language coverage analysis
-          if (["M", "T", "N"].includes(shift) && emp.role !== "Remote Ops") {
-            emp.languages.forEach((lang) =>
-              coverage[shift as "M" | "T" | "N"].add(lang),
-            );
-            counts[shift as "M" | "T" | "N"]++;
+          // Track coverage for all shifts
+          if (["M", "T", "N"].includes(shift)) {
+            const shiftType = shift as "M" | "T" | "N";
+            counts[shiftType]++;
+            roleCoverage[shiftType].add(emp.role);
+
+            // Only add to language coverage if not Remote Ops
+            if (emp.role !== "Remote Ops") {
+              emp.languages.forEach((lang) => coverage[shiftType].add(lang));
+            }
           }
         });
+
+        // Find which required roles are missing from which shifts
+        const missingRolesPerShift = {
+          M: REQUIRED_ROLES.filter((role) => !roleCoverage.M.has(role)),
+          T: REQUIRED_ROLES.filter((role) => !roleCoverage.T.has(role)),
+          N: REQUIRED_ROLES.filter((role) => !roleCoverage.N.has(role)),
+        };
+
+        // Collect all unique missing roles across all shifts
+        const allMissingRoles = Array.from(
+          new Set([
+            ...missingRolesPerShift.M,
+            ...missingRolesPerShift.T,
+            ...missingRolesPerShift.N,
+          ]),
+        );
 
         const missing = {
           M: requiredLangs.filter((l) => !coverage.M.has(l)),
@@ -3736,6 +3791,8 @@ const ShiftScheduler = () => {
           holidayTooltip: (holidayInfo.tooltipLines || []).join("\n"),
           shifts,
           missing,
+          missingRoles: missingRolesPerShift,
+          allMissingRoles,
           lowStaff,
           counts,
           pendingReqs,
@@ -3746,7 +3803,8 @@ const ShiftScheduler = () => {
             missing.N.length > 0 ||
             lowStaff.M ||
             lowStaff.T ||
-            lowStaff.N,
+            lowStaff.N ||
+            allMissingRoles.length > 0,
         });
       }
     }
@@ -5634,7 +5692,7 @@ const ShiftScheduler = () => {
                                   : day.isWeekend
                                     ? "bg-indigo-50 print:bg-gray-100 border-r"
                                     : "bg-gray-100 border-r"
-                          } print:border-black hover:bg-gray-200`}
+                          } print:border-black hover:bg-gray-200 group`}
                           style={
                             headerHolidayBg
                               ? {
@@ -5653,10 +5711,130 @@ const ShiftScheduler = () => {
                           >
                             {day.weekDay}
                           </div>
+                          {day.allMissingRoles &&
+                            day.allMissingRoles.length > 0 && (
+                              <div
+                                className={`inline-flex items-center justify-center mt-1 rounded-full bg-red-100 w-5 h-5 mx-auto text-red-700 ${
+                                  currentUser.role === "manager"
+                                    ? ""
+                                    : "hover:bg-red-200 transition-colors duration-150"
+                                }`}
+                                title={
+                                  currentUser.role === "manager"
+                                    ? undefined
+                                    : (() => {
+                                        const missingByRole: Record<
+                                          string,
+                                          string[]
+                                        > = {};
+                                        [
+                                          "GCC",
+                                          "Field Dispatch",
+                                          "Remote Ops",
+                                        ].forEach((role) => {
+                                          const shifts: string[] = [];
+                                          if (
+                                            day.missingRoles.M?.includes(role)
+                                          )
+                                            shifts.push("M");
+                                          if (
+                                            day.missingRoles.T?.includes(role)
+                                          )
+                                            shifts.push("T");
+                                          if (
+                                            day.missingRoles.N?.includes(role)
+                                          )
+                                            shifts.push("N");
+                                          if (shifts.length > 0) {
+                                            missingByRole[role] = shifts;
+                                          }
+                                        });
+                                        return `Missing: ${Object.entries(
+                                          missingByRole,
+                                        )
+                                          .map(
+                                            ([role, shifts]) =>
+                                              `(${shifts.join(",")}) ${role}`,
+                                          )
+                                          .join(", ")}`;
+                                      })()
+                                }
+                              >
+                                <AlertTriangle size={12} />
+                              </div>
+                            )}
                         </th>
                       );
                     })}
                   </tr>
+                  {/* Coverage Warning Row (manager-only) */}
+                  {currentUser.role === "manager" && (
+                    <tr className="print:hidden">
+                      <td className="sticky left-0 z-20 bg-white border-b border-r px-2 py-1 text-[11px] font-semibold text-gray-600 print:static">
+                        Coverage
+                      </td>
+                      {calendarData.map((day) => {
+                        if (
+                          !day.allMissingRoles ||
+                          day.allMissingRoles.length === 0
+                        ) {
+                          return (
+                            <td
+                              key={day.fullDate}
+                              className="p-1 md:p-1.5 border-b text-center"
+                            />
+                          );
+                        }
+
+                        const missingByRole: Record<string, string[]> = {};
+                        ["GCC", "Field Dispatch", "Remote Ops"].forEach(
+                          (role) => {
+                            const shifts: string[] = [];
+                            if (day.missingRoles.M?.includes(role))
+                              shifts.push("M");
+                            if (day.missingRoles.T?.includes(role))
+                              shifts.push("T");
+                            if (day.missingRoles.N?.includes(role))
+                              shifts.push("N");
+                            if (shifts.length > 0) {
+                              missingByRole[role] = shifts;
+                            }
+                          },
+                        );
+
+                        if (Object.keys(missingByRole).length === 0) {
+                          return (
+                            <td
+                              key={day.fullDate}
+                              className="p-1 md:p-1.5 border-b text-center"
+                            />
+                          );
+                        }
+
+                        return (
+                          <td
+                            key={day.fullDate}
+                            className="p-1.5 md:p-2 border-b bg-orange-50 text-center align-top"
+                          >
+                            <div className="space-y-1">
+                              {Object.entries(missingByRole).map(
+                                ([role, shifts]) => (
+                                  <div key={role} className="leading-tight">
+                                    <div className="text-sm md:text-base font-bold text-orange-700 tracking-wide">
+                                      {shifts.join(",")}
+                                    </div>
+                                    <div className="text-xs md:text-sm text-amber-900 font-medium">
+                                      {role}
+                                    </div>
+                                  </div>
+                                ),
+                              )}
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  )}
                 </thead>
                 <tbody>
                   {filteredTeam.map((emp) => {
