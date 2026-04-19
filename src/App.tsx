@@ -3614,7 +3614,8 @@ const ShiftScheduler = () => {
         const shift = effectiveOverrides[overrideKey] || "F";
         shifts[emp.id] = shift;
 
-        if (["M", "T", "N"].includes(shift)) {
+        // Exclude Remote Ops role from language coverage analysis
+        if (["M", "T", "N"].includes(shift) && emp.role !== "Remote Ops") {
           emp.languages.forEach((lang) =>
             coverage[shift as "M" | "T" | "N"].add(lang),
           );
@@ -3700,7 +3701,8 @@ const ShiftScheduler = () => {
             shift = "F"; // Default to day off - manual scheduling only
           }
           shifts[emp.id] = shift;
-          if (["M", "T", "N"].includes(shift)) {
+          // Exclude Remote Ops role from language coverage analysis
+          if (["M", "T", "N"].includes(shift) && emp.role !== "Remote Ops") {
             emp.languages.forEach((lang) =>
               coverage[shift as "M" | "T" | "N"].add(lang),
             );
