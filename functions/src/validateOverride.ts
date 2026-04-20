@@ -16,8 +16,11 @@
  *   Mitigation: Cache validation results, implement request deduplication
  */
 
-import * as functions from "firebase-functions";
-import { admin } from "./admin";
+import * as express from "express";
+import { https, logger } from "firebase-functions";
+import { db } from "./admin";
+import { httpsOptions } from "./regionConfig";
+import { applyCors } from "./cors";
 
 interface OverrideValidationRequest {
   empId: number;
@@ -50,18 +53,15 @@ const getAllowedShiftTypesForRole = async (
     return new Set(ALLOWED_SHIFT_TYPES);
   }
 
-  const configuredAppId =
-    appId || functions.config()?.app?.id || process.env.APP_ID;
+  const configuredAppId = appId || process.env.APP_ID;
   if (!configuredAppId) {
     return new Set(DEFAULT_ROLE_SHIFT_OPTIONS[role] || ALLOWED_SHIFT_TYPES);
   }
 
   try {
-    const docRef = admin
-      .firestore()
-      .doc(
-        `artifacts/${configuredAppId}/public/data/shift_scheduler/global_state`,
-      );
+    const docRef = db.doc(
+      `artifacts/${configuredAppId}/public/data/shift_scheduler/global_state`,
+    );
     const docSnap = await docRef.get();
     if (!docSnap.exists) {
       return new Set(DEFAULT_ROLE_SHIFT_OPTIONS[role] || ALLOWED_SHIFT_TYPES);
@@ -89,7 +89,7 @@ const getAllowedShiftTypesForRole = async (
         : DEFAULT_ROLE_SHIFT_OPTIONS[role] || ALLOWED_SHIFT_TYPES,
     );
   } catch (error) {
-    functions.logger.warn(
+    logger.warn(
       "[validateOverride] Failed to load shift options; defaulting to role defaults",
       error,
     );
@@ -136,17 +136,10 @@ const checkShiftOverflow = (
  * HTTP endpoint for validating override requests
  * Called by client before attempting write
  */
-export const validateOverride = functions.https.onRequest(
-  async (request, response) => {
-    // CORS headers
-    response.set("Access-Control-Allow-Origin", "*");
-    response.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-    response.set("Access-Control-Allow-Headers", "Content-Type");
-
-    if (request.method === "OPTIONS") {
-      response.status(204).send("");
-      return;
-    }
+export const validateOverride = https.onRequest(
+  httpsOptions,
+  async (request: express.Request, response: express.Response) => {
+    if (!applyCors(request, response)) return;
 
     if (request.method !== "POST") {
       response.status(405).json({ error: "Method not allowed" });
@@ -266,23 +259,30 @@ export const validateOverride = functions.https.onRequest(
  *
  * FUTURE: Implement caching to reduce computation
  */
-export const validateOverrideBatch = functions.https.onCall(
-  async (data: {
-    overrides: Array<{
-      empId: number;
-      dateKey: string;
-      shiftType: string;
-    }>;
-    role: string;
-    userId: string;
-    allOverrides: Record<string, string>;
-    appId?: string;
-  }) => {
+export const validateOverrideBatch = https.onCall(
+  httpsOptions,
+  async (request) => {
+    const data = request.data as {
+      overrides: Array<{
+        empId: number;
+        dateKey: string;
+        shiftType: string;
+      }>;
+      role: string;
+      userId: string;
+      allOverrides: Record<string, string>;
+      appId?: string;
+    };
+
     // Verify role
-    if (!["manager", "admin", "editor"].includes(data.role)) {
-      throw new functions.https.HttpsError(
+    if (
+      !data ||
+      !data.role ||
+      !["manager", "admin", "editor"].includes(data.role)
+    ) {
+      throw new https.HttpsError(
         "permission-denied",
-        `Role '${data.role}' not authorized`,
+        data?.role ? `Role '${data.role}' not authorized` : "Missing role",
       );
     }
 
@@ -293,14 +293,14 @@ export const validateOverrideBatch = functions.https.onCall(
 
     for (const override of data.overrides) {
       if (!ALLOWED_SHIFT_TYPES.includes(override.shiftType as any)) {
-        throw new functions.https.HttpsError(
+        throw new https.HttpsError(
           "invalid-argument",
           `Invalid shift type '${override.shiftType}'`,
         );
       }
 
       if (!allowedShiftTypes.has(override.shiftType as any)) {
-        throw new functions.https.HttpsError(
+        throw new https.HttpsError(
           "permission-denied",
           `Role '${data.role}' cannot request shift '${override.shiftType}'`,
         );

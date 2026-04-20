@@ -8,9 +8,10 @@ import {
 } from "lucide-react";
 import bcrypt from "bcryptjs";
 import type { Employee, Translations, RoleId } from "../types";
+import { getApp } from "firebase/app";
 import { getAuth, signInWithCustomToken } from "firebase/auth";
 import { doc, updateDoc, getFirestore } from "firebase/firestore";
-import { APP_ID } from "../config/constants";
+import { APP_ID, FIRESTORE_DATABASE_ID } from "../config/constants";
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -338,7 +339,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           : u,
       );
 
-      const db = getFirestore();
+      const db = getFirestore(getApp(), FIRESTORE_DATABASE_ID);
       const dataDocRef = doc(
         db,
         "artifacts",

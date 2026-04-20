@@ -1,6 +1,9 @@
-import * as functions from "firebase-functions";
+import * as express from "express";
+import { https, logger } from "firebase-functions";
 import * as bcrypt from "bcryptjs";
 import { admin } from "./admin";
+import { httpsOptions } from "./regionConfig";
+import { applyCors } from "./cors";
 
 interface LoginRequest {
   role: string;
@@ -40,7 +43,7 @@ function checkRateLimit(ip: string): { allowed: boolean; message?: string } {
     return {
       allowed: false,
       message: `Too many attempts. Try again in ${Math.ceil(
-        (attempt.resetTime - now) / 1000 / 60
+        (attempt.resetTime - now) / 1000 / 60,
       )} minutes.`,
     };
   }
@@ -59,21 +62,13 @@ function recordFailedAttempt(ip: string): void {
   }
 }
 
-export const roleLogin = functions.https.onRequest(
+export const roleLogin = https.onRequest(
+  httpsOptions,
   async (
-    req: functions.https.Request,
-    res: functions.Response<LoginResponse | ErrorResponse>
+    req: express.Request,
+    res: express.Response<LoginResponse | ErrorResponse>,
   ) => {
-    // CORS headers
-    res.set("Access-Control-Allow-Origin", "*");
-    res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-    res.set("Access-Control-Allow-Headers", "Content-Type");
-    res.set("X-Content-Type-Options", "nosniff");
-
-    if (req.method === "OPTIONS") {
-      res.sendStatus(204);
-      return;
-    }
+    if (!applyCors(req, res)) return;
 
     if (req.method !== "POST") {
       res.status(405).json({ error: "Method not allowed" } as ErrorResponse);
@@ -144,13 +139,12 @@ export const roleLogin = functions.https.onRequest(
         return;
       }
 
-      // Get hashes from runtime config
-      const cfg = functions.config();
-      const managerHashEnv = cfg.auth?.manager_hash;
-      const adminHashEnv = cfg.auth?.admin_hash;
+      // Environment variables replaced deprecated functions.config()
+      const managerHashEnv = process.env.MANAGER_PASS_HASH;
+      const adminHashEnv = process.env.ADMIN_PASS_HASH;
 
       if (!managerHashEnv || !adminHashEnv) {
-        functions.logger.error("Missing password hashes in config");
+        logger.error("Missing password hashes in environment");
         res
           .status(500)
           .json({ error: "Server configuration error" } as ErrorResponse);
@@ -201,7 +195,7 @@ export const roleLogin = functions.https.onRequest(
           }
         }
       } catch (bcryptError) {
-        functions.logger.error("Bcrypt comparison error:", bcryptError);
+        logger.error("Bcrypt comparison error:", bcryptError);
         res.status(500).json({ error: "Server error" } as ErrorResponse);
         return;
       }
@@ -221,8 +215,8 @@ export const roleLogin = functions.https.onRequest(
 
           recordFailedAttempt(clientIp);
         }
-        functions.logger.warn(
-          `Failed login attempt for role: ${role} from IP: ${clientIp}`
+        logger.warn(
+          `Failed login attempt for role: ${role} from IP: ${clientIp}`,
         );
         res.status(401).json({ error: "Invalid credentials" } as ErrorResponse);
         return;
@@ -247,14 +241,12 @@ export const roleLogin = functions.https.onRequest(
       // Clear failed attempts on successful login
       attemptCache.delete(clientIp);
 
-      functions.logger.info(
-        `Successful ${grantedRole} login from IP: ${clientIp}`
-      );
+      logger.info(`Successful ${grantedRole} login from IP: ${clientIp}`);
 
       res.status(200).json({ token: customToken } as LoginResponse);
     } catch (error) {
-      functions.logger.error("Unexpected error in roleLogin:", error);
+      logger.error("Unexpected error in roleLogin:", error);
       res.status(500).json({ error: "Server error" } as ErrorResponse);
     }
-  }
+  },
 );

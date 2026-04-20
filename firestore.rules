@@ -5,26 +5,18 @@ service cloud.firestore {
     // HELPER FUNCTIONS
     // ============================================
 
-    // Check if user has write permission (manager/admin full write)
+    // Manager/admin have full write access.
     function hasWriteAccess() {
       return request.auth != null &&
              request.auth.token.role in ['manager', 'admin'];
     }
 
-    // Check if user can submit requests (escalators/editors can only modify requests array)
-    function canSubmitRequests() {
-      return request.auth != null &&
-             request.auth.token.role in ['manager', 'admin', 'editor'];
-    }
-
-    // Minimal validation - only check field existence and basic types
+    // Minimal shape validation for full writes.
     function isValidGlobalState() {
       let data = request.resource.data;
-
-      // For merge writes (batching), only validate fields that are present
-      // For full writes, validate all required fields
-      let hasAllRequiredFields = data.keys().hasAll(['overrides', 'publishedOverrides', 'team', 'lastUpdated', 'config']);
-      
+      let hasAllRequiredFields = data.keys().hasAll(
+        ['overrides', 'publishedOverrides', 'team', 'lastUpdated', 'config']
+      );
       let fieldsAreValidType = (
         (!('overrides' in data) || data.overrides is map) &&
         (!('publishedOverrides' in data) || data.publishedOverrides is map) &&
@@ -32,46 +24,45 @@ service cloud.firestore {
         (!('lastUpdated' in data) || data.lastUpdated is number) &&
         (!('config' in data) || data.config is map)
       );
-      
-      // If request is a merge update (subset of fields), only validate type
-      // If request is a full write (all fields), validate both presence and type
-      return request.writeFields.size() < 5 ? fieldsAreValidType : (hasAllRequiredFields && fieldsAreValidType);
+      return request.writeFields.size() < 5
+        ? fieldsAreValidType
+        : (hasAllRequiredFields && fieldsAreValidType);
     }
 
-    // ============================================
-    // FIRESTORE RULES
-    // ============================================
-
-    // Public read access to schedule
-    match /artifacts/{appId}/public/data/shift_scheduler/global_state {
-      allow read: if true; // Public read - schedule is non-sensitive
-
-      // Manager/Admin: full write with validation
-      allow write, update: if hasWriteAccess() && isValidGlobalState();
-
-      // Any authenticated user: can update their own password only
-      // (password-only updates bypass write permission checks)
-      allow update: if request.auth != null &&
-                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['team', 'lastUpdated']) &&
-                       request.resource.data.team is list &&
-                       resource.data.team is list &&
-                       request.resource.data.team.size() == resource.data.team.size() &&
-                       // Ensure only password fields (and requirePasswordChange) changed in one team member
-                       request.resource.data.team.size() > 0;
-
-      // Editor/Escalator: can only update the requests array (append only)
-      allow update: if request.auth != null &&
-                       request.auth.token.role == 'editor' &&
-                       request.resource.data.requests is list &&
-                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['requests', 'lastUpdated']) &&
-                       request.resource.data.requests.size() > resource.data.requests.size();
-
-      allow delete: if false; // Never allow deletion
-    }
-
-    // Deny all other access
+    // Deny-by-default on every other document.
     match /{document=**} {
       allow read, write: if false;
+    }
+
+    // ============================================
+    // Shift scheduler global state
+    // ============================================
+    // The schedule itself is non-sensitive (names are visible on the client
+    // once authenticated); reads are public so the landing page can load.
+    // All mutating paths require authentication and a role claim.
+    //
+    // IMPORTANT: password changes must go through the `changePassword`
+    // Cloud Function (Admin SDK write) — client-side team edits are only
+    // allowed for manager/admin, and the Cloud Function bypasses these
+    // rules when acting as a service account.
+    match /artifacts/{appId}/public/data/shift_scheduler/global_state {
+      allow read: if true;
+
+      // Manager/admin: full writes with basic shape validation.
+      allow create, update: if hasWriteAccess() && isValidGlobalState();
+
+      // Editor: append-only to the `requests` queue. Cannot touch `team`,
+      // `overrides`, `publishedOverrides`, `config`, or any other field.
+      allow update: if request.auth != null &&
+                       request.auth.token.role == 'editor' &&
+                       request.resource.data.diff(resource.data)
+                         .affectedKeys().hasOnly(['requests', 'lastUpdated']) &&
+                       request.resource.data.requests is list &&
+                       request.resource.data.requests.size()
+                         > resource.data.requests.size();
+
+      // Deletes are never allowed from the client.
+      allow delete: if false;
     }
   }
 }

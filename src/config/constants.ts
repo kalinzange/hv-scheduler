@@ -5,6 +5,7 @@ import type {
   FeatureToggles,
   ShiftOptionsByRole,
 } from "../types";
+import firebaseJson from "../../firebase.json";
 
 // --- FIREBASE CONFIGURATION ---
 // Configuration is loaded from environment variables (.env file)
@@ -19,6 +20,10 @@ export const FIREBASE_CONFIG = {
 };
 
 export const APP_ID = import.meta.env.VITE_APP_ID;
+
+// Firestore named database — single source of truth is firebase.json.
+export const FIRESTORE_DATABASE_ID = firebaseJson.firestore.database;
+export const FIRESTORE_REGION = firebaseJson.firestore.location;
 
 // --- GOOGLE CALENDAR API CONFIGURATION ---
 // Fall back to the Firebase API key when a dedicated Calendar API key is not set.
@@ -169,75 +174,6 @@ export const SUPPORTED_HOLIDAY_COUNTRIES = [
   { code: "IN", name: "India" },
 ];
 
-export const INITIAL_TEAM: Employee[] = [
-  {
-    id: 4,
-    name: "Huyesin Gozcu",
-    role: "GCC",
-    languages: ["EN", "TR", "PT"],
-    password: "1234",
-  },
-  {
-    id: 6,
-    name: "Lourdes Gutierrez",
-    role: "GCC",
-    languages: ["EN", "ES", "PT"],
-    password: "1234",
-  },
-  {
-    id: 11,
-    name: "Sergio Ribeiro",
-    role: "TL",
-    languages: ["EN", "FR", "PT"],
-    password: "1234",
-  },
-  {
-    id: 2,
-    name: "Filipe Cardoso",
-    role: "TL",
-    languages: ["EN", "FR", "PT"],
-    password: "1234",
-  },
-  {
-    id: 8,
-    name: "Joao Monteiro",
-    role: "GCC",
-    languages: ["EN", "PT"],
-    password: "1234",
-  },
-  {
-    id: 14,
-    name: "Juliana Andrade",
-    role: "GCC",
-    languages: ["EN", "PT"],
-    password: "1234",
-  },
-  {
-    id: 10,
-    name: "Rita Quaresma",
-    role: "GCC",
-    languages: ["EN", "PT", "ES"],
-    password: "1234",
-  },
-  {
-    id: 5,
-    name: "Hugo Rodrigues",
-    role: "GCC",
-    languages: ["EN", "PT"],
-    password: "1234",
-  },
-  {
-    id: 9,
-    name: "Miguel Geada",
-    role: "GCC",
-    languages: ["EN", "PT"],
-    password: "1234",
-  },
-  {
-    id: 7,
-    name: "Lucas Alves",
-    role: "GCC",
-    languages: ["EN", "PT"],
-    password: "1234",
-  },
-];
+// Empty by default. Real team members are loaded from Firestore at runtime;
+// An admin can seed or modify the team via the AdminPanel.
+export const INITIAL_TEAM: Employee[] = [];

@@ -1,26 +1,55 @@
-# Environment variables
+# ============================================
+# SECRETS & CREDENTIALS — never commit
+# ============================================
+# All env files (any location, any suffix) except templates
 .env
-.env.local
-.env.*.local
--PF5MFGVZ.env
-!.env.vault
+.env.*
+**/.env
+**/.env.*
 !.env.example
-.env.production
-.env.staging
+!.env.vault
 
-# Firebase
+# Randomly-named env backups that some editors / cloud sync tools create
+*-*.env
+*.env.bak
+*.env.backup
+
+# Firebase / GCP service account & admin credentials
 .firebaserc
 .firebase/
+firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+ui-debug.log
+*service-account*.json
+*serviceAccount*.json
+*.credentials.json
+*google-credentials*.json
+*adminsdk*.json
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Any file that looks like a secret
+secrets/
+*.secret
+*.secrets
+
+# ============================================
+# Firebase Functions
+# ============================================
+functions/lib/
 functions/dist/
-functions/.env.production
+functions/node_modules/
+functions/*.local
+functions/.runtimeconfig.json
+functions/tsconfig.dev.json
+functions/src/generated/
 
-# GitHub
-.github/
-
-# Dependencies
-node_modules/
-
-# Python (for Firebase Functions)
+# ============================================
+# Python (Firebase Functions Python runtime)
+# ============================================
 .venv/
 venv/
 __pycache__/
@@ -29,31 +58,37 @@ __pycache__/
 *.pyd
 .Python
 
+# ============================================
+# Dependencies
+# ============================================
+node_modules/
+
+# ============================================
 # Build outputs
+# ============================================
 dist/
 dist-ssr/
+build/
 *.local
 *.tsbuildinfo
 
+# IMPORTANT: docs/ is the GitHub Pages build artifact. It is currently
+# committed (the pre-push hook publishes to Pages from docs/). Keep it
+# tracked unless you switch Pages to deploy via GitHub Actions only.
+# If you migrate off the commit-to-docs workflow, uncomment the next line:
+# docs/
+
+# ============================================
 # Cache files
+# ============================================
 .eslintcache
 .cache/
+.parcel-cache/
+.vite/
 
-# OS files
-.DS_Store
-Thumbs.db
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# Git hooks (using custom hooks/ folder instead)
-.husky/
-
+# ============================================
 # Logs
+# ============================================
 logs/
 *.log
 npm-debug.log*
@@ -62,10 +97,45 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# ============================================
 # Testing
+# ============================================
 coverage/
 .nyc_output/
 
+# ============================================
+# OS files
+# ============================================
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ============================================
+# IDE / editor
+# ============================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ============================================
+# AI/agent tooling (local state, not project config)
+# ============================================
+.agents/
+.claude/
+skills-lock.json
+
+# ============================================
+# Husky (project uses custom hooks/ folder instead)
+# ============================================
+.husky/
+
+# ============================================
 # Temporary files
+# ============================================
 *.tmp
 *.bak
+*.old
+*.orig

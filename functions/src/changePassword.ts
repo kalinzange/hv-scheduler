@@ -1,12 +1,16 @@
-import * as functions from "firebase-functions";
+import * as express from "express";
+import { https } from "firebase-functions";
 import * as bcrypt from "bcryptjs";
-import { admin } from "./admin";
+import { db } from "./admin";
+import { httpsOptions } from "./regionConfig";
+import { applyCors } from "./cors";
 
 interface PasswordChangeRequest {
   role: string;
   userId: number;
   oldPassword: string;
   newPassword: string;
+  appId?: string;
   team?: Array<{ id: number; name: string; password?: string }>;
 }
 
@@ -23,21 +27,13 @@ interface ErrorResponse {
  * Cloud Function to allow users to change their own password
  * This bypasses normal Firestore security rules for password-only changes
  */
-export const changePassword = functions.https.onRequest(
+export const changePassword = https.onRequest(
+  httpsOptions,
   async (
-    req: functions.https.Request,
-    res: functions.Response<PasswordChangeResponse | ErrorResponse>
+    req: express.Request,
+    res: express.Response<PasswordChangeResponse | ErrorResponse>,
   ) => {
-    // CORS headers
-    res.set("Access-Control-Allow-Origin", "*");
-    res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-    res.set("Access-Control-Allow-Headers", "Content-Type");
-    res.set("X-Content-Type-Options", "nosniff");
-
-    if (req.method === "OPTIONS") {
-      res.sendStatus(204);
-      return;
-    }
+    if (!applyCors(req, res)) return;
 
     if (req.method !== "POST") {
       res.status(405).json({ error: "Method not allowed" } as ErrorResponse);
@@ -45,29 +41,38 @@ export const changePassword = functions.https.onRequest(
     }
 
     try {
-      const { role, userId, oldPassword, newPassword, team } =
+      const { role, userId, oldPassword, newPassword, appId, team } =
         req.body as PasswordChangeRequest;
 
       if (!role || !userId || !oldPassword || !newPassword) {
         res.status(400).json({
-          error: "Missing required fields: role, userId, oldPassword, newPassword",
+          error:
+            "Missing required fields: role, userId, oldPassword, newPassword",
         } as ErrorResponse);
         return;
       }
 
-      if (newPassword.length < 3) {
-        res
-          .status(400)
-          .json({ error: "New password must be at least 3 characters" } as ErrorResponse);
+      if (
+        typeof newPassword !== "string" ||
+        newPassword.length < 8 ||
+        newPassword.length > 200
+      ) {
+        res.status(400).json({
+          error: "New password must be 8–200 characters",
+        } as ErrorResponse);
         return;
       }
 
-      // Get current team data from Firestore
-      const db = admin.firestore();
-      const globalStateDoc = await db.collection("global_state").doc("state").get();
+      const firebaseAppId = appId || process.env.APP_ID || "hv-scheduler";
+      const globalStateRef = db.doc(
+        `artifacts/${firebaseAppId}/public/data/shift_scheduler/global_state`,
+      );
+      const globalStateDoc = await globalStateRef.get();
 
       if (!globalStateDoc.exists) {
-        res.status(500).json({ error: "Global state not found" } as ErrorResponse);
+        res
+          .status(500)
+          .json({ error: "Global state not found" } as ErrorResponse);
         return;
       }
 
@@ -94,7 +99,9 @@ export const changePassword = functions.https.onRequest(
       }
 
       if (!passwordMatches) {
-        res.status(401).json({ error: "Incorrect current password" } as ErrorResponse);
+        res
+          .status(401)
+          .json({ error: "Incorrect current password" } as ErrorResponse);
         return;
       }
 
@@ -103,12 +110,15 @@ export const changePassword = functions.https.onRequest(
 
       // Update only the password field for this user
       const updatedTeam = currentTeam.map((u: any) =>
-        u.id === userId ? { ...u, password: hashedNewPassword, requirePasswordChange: false } : u
+        u.id === userId
+          ? { ...u, password: hashedNewPassword, requirePasswordChange: false }
+          : u,
       );
 
       // Write back to Firestore (bypasses app-level permission checks)
-      await db.collection("global_state").doc("state").update({
+      await globalStateRef.update({
         team: updatedTeam,
+        lastUpdated: Date.now(),
       });
 
       res.status(200).json({
@@ -119,7 +129,9 @@ export const changePassword = functions.https.onRequest(
       console.error("Password change error:", error);
       res
         .status(500)
-        .json({ error: `Password change failed: ${String(error)}` } as ErrorResponse);
+        .json({
+          error: `Password change failed: ${String(error)}`,
+        } as ErrorResponse);
     }
-  }
+  },
 );
