@@ -4,7 +4,7 @@
 // Does NOT auto-commit the build output: docs/ is rebuilt in CI with
 // deployment secrets, so committing a local build leaks local .env values.
 
-const { spawnSync } = require("child_process");
+import { spawnSync } from "node:child_process";
 
 console.log("Validating build before push...");
 
@@ -14,9 +14,9 @@ const buildResult = spawnSync("npm", ["run", "build"], {
 });
 
 if (buildResult.status !== 0) {
-  console.error("❌ Build failed. Fix errors before pushing.");
+  console.error("Build failed. Fix errors before pushing.");
   process.exit(1);
 }
 
-console.log("✅ Build OK. Continuing with push.");
+console.log("Build OK. Continuing with push.");
 process.exit(0);
