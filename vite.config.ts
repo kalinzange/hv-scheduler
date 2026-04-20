@@ -4,6 +4,10 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig(({ mode }) => ({
   plugins: [react(), tailwindcss()],
+  // Env vars with these prefixes are inlined into the client bundle (public).
+  // Server-only secrets must use different names (e.g. ADMIN_*, FN_*, SA_*)
+  // or live only in functions/.env — never add a broad prefix like "API_".
+  envPrefix: ["FIREBASE_", "GOOGLE_", "APP_", "CLOUD_FUNCTION_"],
   // Use root base in dev so assets load at localhost; keep GH Pages base for production builds
   base: mode === "production" ? "/hv-scheduler/" : "/",
   build: {

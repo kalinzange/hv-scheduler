@@ -1,0 +1,26 @@
+title = "hv-scheduler gitleaks config"
+
+# Inherit the default gitleaks ruleset, then apply our allowlist below.
+[extend]
+useDefault = true
+
+# ---------------------------------------------------------------------------
+# Allowlist
+# ---------------------------------------------------------------------------
+# Everything in docs/ is the Vite production bundle served by GitHub Pages.
+# Client-side Firebase apps require the Firebase Web API key, authDomain,
+# projectId, etc. to be present in the bundle at runtime — these values are
+# public by design. Security is enforced via:
+#   - GCP API-key restrictions (HTTP referrer + API allowlist)
+#   - Firebase Security Rules (Firestore, Storage, Auth)
+#   - Firebase App Check
+# Scanning docs/ for "secrets" produces only false positives, so it is
+# excluded. Any real secret (service account, admin SDK, server-side key)
+# must never live in the client bundle in the first place.
+[allowlist]
+description = "Public client bundle + documentation placeholders"
+paths = [
+  '''^docs/''',
+  '''^\.env\.example$''',
+  '''^GOOGLE_CALENDAR_API_SETUP\.md$''',
+]

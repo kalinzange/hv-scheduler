@@ -439,7 +439,7 @@ const fetchFromGoogleHolidaysForYear = async (
 
   if (!GOOGLE_CALENDAR_API_KEY) {
     throw new Error(
-      "Google Calendar API key not configured. Set VITE_GOOGLE_CALENDAR_API_KEY or ensure VITE_FIREBASE_API_KEY is available.",
+      "Google Calendar API key not configured. Set GOOGLE_CALENDAR_API_KEY in your .env (must be a dedicated Calendar-only GCP key, not the Firebase key).",
     );
   }
 

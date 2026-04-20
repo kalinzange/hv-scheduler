@@ -165,8 +165,8 @@ https://us-central1-YOUR_PROJECT_ID.cloudfunctions.net/roleLogin
 
 Add this to:
 
-- `.env.local` as `VITE_CLOUD_FUNCTION_URL`
-- GitHub Secrets as `VITE_CLOUD_FUNCTION_URL`
+- `.env.local` as `CLOUD_FUNCTION_URL`
+- GitHub Secrets as `CLOUD_FUNCTION_URL`
 
 ## Common Issues
 
@@ -260,7 +260,7 @@ firebase deploy --only functions
 
 # 4. Add to GitHub Secrets
 # Go to Settings → Secrets → Actions
-# Add: VITE_CLOUD_FUNCTION_URL = <function-url>
+# Add: CLOUD_FUNCTION_URL = <function-url>
 
 # 5. Push to deploy via GitHub Actions
 git push origin main

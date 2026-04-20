@@ -82,3 +82,9 @@ textarea {
 .regular-weekday {
   color: oklch(0.551 0.027 264.364);
 }
+
+/* Hide the reCAPTCHA v3 badge — attribution text is rendered in the app shell
+   footer to satisfy Google's branding requirement. */
+.grecaptcha-badge {
+  visibility: hidden !important;
+}

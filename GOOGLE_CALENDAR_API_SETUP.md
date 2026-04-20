@@ -41,7 +41,7 @@ The application uses the Google Calendar API to fetch public holidays for variou
 2. Open `.env` and add your API key:
 
    ```
-   VITE_GOOGLE_CALENDAR_API_KEY=AIzaSy...your_actual_key_here
+   GOOGLE_CALENDAR_API_KEY=AIzaSy...your_actual_key_here
    ```
 
 3. For Firebase deployment, also set it in Firebase:
@@ -112,7 +112,7 @@ GET https://www.googleapis.com/calendar/v3/calendars/{calendarId}/events
 
 ### Error: "API key not configured"
 
-- Ensure `VITE_GOOGLE_CALENDAR_API_KEY` is set in your `.env` file
+- Ensure `GOOGLE_CALENDAR_API_KEY` is set in your `.env` file
 - Restart the dev server after adding the key
 
 ### Error: 403 Forbidden

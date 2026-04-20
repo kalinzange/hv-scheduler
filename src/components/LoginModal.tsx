@@ -106,7 +106,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           return;
         }
 
-        const cloudFunctionUrl = import.meta.env.VITE_CLOUD_FUNCTION_URL;
+        const cloudFunctionUrl = import.meta.env.CLOUD_FUNCTION_URL;
         if (!cloudFunctionUrl) {
           setError("Server configuration error. Contact administrator.");
           setIsLoading(false);
@@ -184,7 +184,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       }
 
       try {
-        const cloudFunctionUrl = import.meta.env.VITE_CLOUD_FUNCTION_URL;
+        const cloudFunctionUrl = import.meta.env.CLOUD_FUNCTION_URL;
         if (!cloudFunctionUrl) {
           setError("Server configuration error. Contact administrator.");
           setIsLoading(false);

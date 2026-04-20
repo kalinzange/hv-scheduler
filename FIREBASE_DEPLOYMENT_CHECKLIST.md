@@ -141,31 +141,31 @@ Complete this checklist in order to deploy Firebase Functions with secure authen
 
 - [ ] **Create/update `.env.local`** in project root
   ```env
-  VITE_CLOUD_FUNCTION_URL=https://us-central1-YOUR_PROJECT.cloudfunctions.net/roleLogin
-  VITE_FIREBASE_API_KEY=your-api-key
-  VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
-  VITE_FIREBASE_PROJECT_ID=your-project-id
-  VITE_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
-  VITE_FIREBASE_MESSAGING_SENDER_ID=123456789
-  VITE_FIREBASE_APP_ID=1:123456789:web:abc123
+  CLOUD_FUNCTION_URL=https://us-central1-YOUR_PROJECT.cloudfunctions.net/roleLogin
+  FIREBASE_API_KEY=your-api-key
+  FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+  FIREBASE_PROJECT_ID=your-project-id
+  FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+  FIREBASE_MESSAGING_SENDER_ID=123456789
+  FIREBASE_APP_ID=1:123456789:web:abc123
   ```
 
 ### GitHub Actions (Production)
 
-- [ ] **Add GitHub Secret: VITE_CLOUD_FUNCTION_URL**
+- [ ] **Add GitHub Secret: CLOUD_FUNCTION_URL**
   1. Go to GitHub repo → Settings → Secrets and variables → Actions
   2. Click "New repository secret"
-  3. Name: `VITE_CLOUD_FUNCTION_URL`
+  3. Name: `CLOUD_FUNCTION_URL`
   4. Value: `https://us-central1-YOUR_PROJECT.cloudfunctions.net/roleLogin`
   5. Click "Add secret"
 
 - [ ] **Verify other Firebase secrets exist**
-  - `VITE_FIREBASE_API_KEY`
-  - `VITE_FIREBASE_AUTH_DOMAIN`
-  - `VITE_FIREBASE_PROJECT_ID`
-  - `VITE_FIREBASE_STORAGE_BUCKET`
-  - `VITE_FIREBASE_MESSAGING_SENDER_ID`
-  - `VITE_FIREBASE_APP_ID`
+  - `FIREBASE_API_KEY`
+  - `FIREBASE_AUTH_DOMAIN`
+  - `FIREBASE_PROJECT_ID`
+  - `FIREBASE_STORAGE_BUCKET`
+  - `FIREBASE_MESSAGING_SENDER_ID`
+  - `FIREBASE_APP_ID`
 
 ## Step 6: Test Locally
 

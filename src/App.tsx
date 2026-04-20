@@ -50,6 +50,10 @@ import bcrypt from "bcryptjs";
 // --- FIREBASE IMPORTS ---
 import { initializeApp, getApp } from "firebase/app";
 import {
+  initializeAppCheck,
+  ReCaptchaV3Provider,
+} from "firebase/app-check";
+import {
   getAuth,
   signInAnonymously,
   signInWithCustomToken,
@@ -83,6 +87,7 @@ import type {
 } from "./types";
 import {
   FIREBASE_CONFIG,
+  FIREBASE_APP_CHECK_SITE_KEY,
   FIRESTORE_DATABASE_ID,
   APP_ID,
   ROLES,
@@ -1792,6 +1797,24 @@ const ShiftScheduler = () => {
 
       try {
         const app = initializeApp(FIREBASE_CONFIG);
+
+        // App Check — attaches an attestation token to every Firebase request
+        // so keys stolen from the bundle can't be used off-domain.
+        if (FIREBASE_APP_CHECK_SITE_KEY) {
+          try {
+            initializeAppCheck(app, {
+              provider: new ReCaptchaV3Provider(FIREBASE_APP_CHECK_SITE_KEY),
+              isTokenAutoRefreshEnabled: true,
+            });
+          } catch (appCheckError) {
+            console.warn("[App Check] Init failed:", appCheckError);
+          }
+        } else if (import.meta.env.PROD) {
+          console.warn(
+            "[App Check] Disabled — FIREBASE_APP_CHECK_SITE_KEY not set",
+          );
+        }
+
         const auth = getAuth(app);
         const db = initializeFirestore(
           app,
@@ -6595,6 +6618,29 @@ const ShiftScheduler = () => {
             </div>
           )}
         </div>
+      </div>
+
+      {/* reCAPTCHA v3 attribution (required when the badge is hidden). */}
+      <div className="text-[10px] text-slate-400 text-center py-1 print:hidden">
+        This site is protected by reCAPTCHA and the Google{" "}
+        <a
+          href="https://policies.google.com/privacy"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:text-slate-600"
+        >
+          Privacy Policy
+        </a>{" "}
+        and{" "}
+        <a
+          href="https://policies.google.com/terms"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:text-slate-600"
+        >
+          Terms of Service
+        </a>{" "}
+        apply.
       </div>
     </div>
   );

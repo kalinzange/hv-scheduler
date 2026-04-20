@@ -72,11 +72,10 @@ build/
 *.local
 *.tsbuildinfo
 
-# IMPORTANT: docs/ is the GitHub Pages build artifact. It is currently
-# committed (the pre-push hook publishes to Pages from docs/). Keep it
-# tracked unless you switch Pages to deploy via GitHub Actions only.
-# If you migrate off the commit-to-docs workflow, uncomment the next line:
-# docs/
+# docs/ is the Vite build output. GitHub Pages is deployed via
+# .github/workflows/deploy.yml (Pages source = "GitHub Actions"), which
+# builds from source on the runner
+docs/*
 
 # ============================================
 # Cache files

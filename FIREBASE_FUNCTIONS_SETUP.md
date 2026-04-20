@@ -142,7 +142,7 @@ Add the function URL to your environment variables:
 Create/update `.env.local`:
 
 ```env
-VITE_CLOUD_FUNCTION_URL=https://us-central1-YOUR_PROJECT.cloudfunctions.net/roleLogin
+CLOUD_FUNCTION_URL=https://us-central1-YOUR_PROJECT.cloudfunctions.net/roleLogin
 ```
 
 ### For GitHub Pages (Production)
@@ -151,15 +151,15 @@ Add as a GitHub Secret:
 
 1. Go to **Settings** → **Secrets and variables** → **Actions**
 2. Add secret:
-   - Name: `VITE_CLOUD_FUNCTION_URL`
+   - Name: `CLOUD_FUNCTION_URL`
    - Value: `https://us-central1-YOUR_PROJECT.cloudfunctions.net/roleLogin`
 
 Your workflow already injects this in the build step:
 
 ```yaml
 env:
-  VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
-  VITE_CLOUD_FUNCTION_URL: ${{ secrets.VITE_CLOUD_FUNCTION_URL }}
+  FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+  CLOUD_FUNCTION_URL: ${{ secrets.CLOUD_FUNCTION_URL }}
   # ... other vars
 ```
 

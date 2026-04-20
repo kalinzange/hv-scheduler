@@ -53,13 +53,13 @@ cp .env.example .env
 4. Configure your Firebase credentials in the `.env` file:
 
 ```env
-VITE_FIREBASE_API_KEY=your_firebase_api_key
-VITE_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
-VITE_FIREBASE_PROJECT_ID=your_project_id
-VITE_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
-VITE_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
-VITE_FIREBASE_APP_ID=your_app_id
-VITE_APP_ID=your_app_identifier
+FIREBASE_API_KEY=your_firebase_api_key
+FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+FIREBASE_PROJECT_ID=your_project_id
+FIREBASE_STORAGE_BUCKET=your_project.appspot.com
+FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+FIREBASE_APP_ID=your_app_id
+APP_ID=your_app_identifier
 ```
 
 5. Start the development server:
@@ -102,8 +102,8 @@ firebase deploy --only functions
 ```
 
 5. Update environment variables:
-   - Add `VITE_CLOUD_FUNCTION_URL` to `.env.local` for local development
-   - Add `VITE_CLOUD_FUNCTION_URL` to GitHub Secrets for production
+   - Add `CLOUD_FUNCTION_URL` to `.env.local` for local development
+   - Add `CLOUD_FUNCTION_URL` to GitHub Secrets for production
 
 **Documentation:**
 

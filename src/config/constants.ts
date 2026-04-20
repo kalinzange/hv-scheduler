@@ -11,24 +11,32 @@ import firebaseJson from "../../firebase.json";
 // Configuration is loaded from environment variables (.env file)
 // See .env.example for all available configuration options
 export const FIREBASE_CONFIG = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  apiKey: import.meta.env.FIREBASE_API_KEY,
+  authDomain: import.meta.env.FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.FIREBASE_APP_ID,
 };
 
-export const APP_ID = import.meta.env.VITE_APP_ID;
+export const APP_ID = import.meta.env.APP_ID;
+
+// Firebase App Check — reCAPTCHA v3 site key (public, shipped in bundle).
+// Register a site at https://www.google.com/recaptcha/admin and enable
+// App Check in the Firebase Console with the matching reCAPTCHA v3 provider.
+export const FIREBASE_APP_CHECK_SITE_KEY = import.meta.env
+  .FIREBASE_APP_CHECK_SITE_KEY as string | undefined;
 
 // Firestore named database — single source of truth is firebase.json.
 export const FIRESTORE_DATABASE_ID = firebaseJson.firestore.database;
 export const FIRESTORE_REGION = firebaseJson.firestore.location;
 
 // --- GOOGLE CALENDAR API CONFIGURATION ---
-// Fall back to the Firebase API key when a dedicated Calendar API key is not set.
-export const GOOGLE_CALENDAR_API_KEY =
-  import.meta.env.VITE_GOOGLE_CALENDAR_API_KEY || FIREBASE_CONFIG.apiKey;
+// Must be a dedicated, Calendar-only GCP API key. Never reuse the Firebase
+// browser key here — doing so forces Calendar API onto the Firebase key's
+// allowlist and widens its blast radius.
+export const GOOGLE_CALENDAR_API_KEY = import.meta.env
+  .GOOGLE_CALENDAR_API_KEY as string | undefined;
 
 // NOTE: Master passwords must NOT be exposed in client code.
 // They are validated server-side via Netlify Function `role-login` using environment variables.
