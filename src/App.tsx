@@ -79,9 +79,11 @@ import type {
   FeatureToggles,
   NonAdminRoleId,
   ShiftOptionsByRole,
+  CustomShift,
 } from "./types";
 import {
   FIREBASE_CONFIG,
+  FIRESTORE_DATABASE_ID,
   APP_ID,
   ROLES,
   ALL_LANGUAGES,
@@ -239,11 +241,16 @@ const BulkActionModal = ({
   currentUser,
   preSelectedId,
   shiftOptionsByRole,
+  customShifts,
 }: any) => {
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [shiftType, setShiftType] = useState<OverrideType | "CLEAR">("V");
   const [selectedEmpId, setSelectedEmpId] = useState<string>(""); // '' = none, 'ALL' = all
+
+  const isEditor = currentUser.role === "editor";
+  const isManager =
+    currentUser.role === "manager" || currentUser.role === "admin";
 
   // Auto-select user logic
   useEffect(() => {
@@ -271,9 +278,13 @@ const BulkActionModal = ({
     }
   };
 
-  const isManager = currentUser.role === "manager";
-  const isEditor = currentUser.role === "editor";
-  const allShiftOptions: OverrideType[] = ["M", "T", "N", "F", "V", "S", "TR"];
+  const allShiftOptions: OverrideType[] = useMemo(() => {
+    const standardShifts: OverrideType[] = ["V", "S", "TR"];
+    const customShiftCodes = customShifts.map(
+      (s: CustomShift) => s.code as OverrideType,
+    );
+    return [...customShiftCodes, ...standardShifts];
+  }, [customShifts]);
   const roleKey = currentUser.role as NonAdminRoleId;
   const allowedShiftOptions: OverrideType[] =
     currentUser.role === "admin"
@@ -587,19 +598,31 @@ const CellEditor = ({
   customColors,
   currentUserRole,
   shiftOptionsByRole,
+  customShifts,
 }: any) => {
-  // Build options dynamically from standard shifts and custom shifts
+  // Build options dynamically from custom shifts and standard shifts
   const allOptions: {
     id: OverrideType | "CLEAR";
     label: string;
     icon?: any;
     color: string;
   }[] = [
-    // Standard shifts
-    { id: "M", label: `Morning (${legends.M})`, color: customColors.M },
-    { id: "T", label: `Afternoon (${legends.T})`, color: customColors.T },
-    { id: "N", label: `Night (${legends.N})`, color: customColors.N },
-    { id: "F", label: "Day Off", color: customColors.F },
+    // Custom working shifts
+    ...customShifts
+      .filter((s: CustomShift) => s.isWorkingShift)
+      .map((shift: CustomShift) => ({
+        id: shift.code as OverrideType,
+        label: `${shift.label} (${legends[shift.code] || shift.code})`,
+        color: customColors[shift.code],
+      })),
+    // Non-working shifts
+    ...customShifts
+      .filter((s: CustomShift) => !s.isWorkingShift)
+      .map((shift: CustomShift) => ({
+        id: shift.code as OverrideType,
+        label: shift.label,
+        color: customColors[shift.code],
+      })),
     {
       id: "V",
       label: "Vacation",
@@ -621,9 +644,13 @@ const CellEditor = ({
   const roleKey = currentUserRole as NonAdminRoleId;
   const allowedShiftOptions: OverrideType[] =
     currentUserRole === "admin"
-      ? (["M", "T", "N", "F", "V", "S", "TR"] as OverrideType[])
+      ? allOptions
+          .map((opt) => opt.id as OverrideType)
+          .filter((id) => id !== "CLEAR")
       : (shiftOptionsByRole?.[roleKey] as OverrideType[]) ||
-        (["M", "T", "N", "F", "V", "S", "TR"] as OverrideType[]);
+        allOptions
+          .map((opt) => opt.id as OverrideType)
+          .filter((id) => id !== "CLEAR");
   const options = allOptions.filter((opt) =>
     allowedShiftOptions.includes(opt.id as OverrideType),
   );
@@ -699,6 +726,8 @@ const ConfigPanel = ({
   onReset,
   hoursConfig,
   setHoursConfig,
+  customShifts,
+  setCustomShifts,
 }: any) => {
   if (!show) return null;
   const t = TRANSLATIONS[lang as LangCode];
@@ -713,6 +742,68 @@ const ConfigPanel = ({
     if (weekendDays.includes(dayIndex))
       setWeekendDays(weekendDays.filter((d: number) => d !== dayIndex));
     else setWeekendDays([...weekendDays, dayIndex]);
+  };
+
+  const handleAddCustomShift = () => {
+    const newCode = prompt("Enter shift code (e.g., E for Evening):");
+    if (!newCode || !newCode.trim()) return;
+
+    const code = newCode.trim().toUpperCase();
+    if (customShifts.some((s: CustomShift) => s.code === code)) {
+      alert("Shift code already exists!");
+      return;
+    }
+
+    const newShift: CustomShift = {
+      code,
+      label: code,
+      hours: 8,
+      color: "#cccccc",
+      isWorkingShift: true,
+    };
+
+    setCustomShifts([...customShifts, newShift]);
+    setLegends({ ...legends, [code]: code });
+    setColors({ ...colors, [code]: "#cccccc" });
+    setHoursConfig({ ...hoursConfig, [code]: 8 });
+  };
+
+  const handleRemoveCustomShift = (code: string) => {
+    if (!confirm(`Remove shift ${code}? This cannot be undone.`)) return;
+
+    setCustomShifts(customShifts.filter((s: CustomShift) => s.code !== code));
+
+    const newLegends = { ...legends };
+    const newColors = { ...colors };
+    const newHoursConfig = { ...hoursConfig };
+
+    delete newLegends[code];
+    delete newColors[code];
+    delete newHoursConfig[code];
+
+    setLegends(newLegends);
+    setColors(newColors);
+    setHoursConfig(newHoursConfig);
+  };
+
+  const updateCustomShift = (
+    code: string,
+    field: keyof CustomShift,
+    value: any,
+  ) => {
+    setCustomShifts(
+      customShifts.map((shift: CustomShift) =>
+        shift.code === code ? { ...shift, [field]: value } : shift,
+      ),
+    );
+
+    if (field === "label") {
+      setLegends({ ...legends, [code]: value });
+    } else if (field === "color") {
+      setColors({ ...colors, [code]: value });
+    } else if (field === "hours") {
+      setHoursConfig({ ...hoursConfig, [code]: value });
+    }
   };
 
   const updateEmp = (id: number, field: string, value: any) => {
@@ -877,39 +968,26 @@ const ConfigPanel = ({
           </label>
           <div className="overflow-x-auto">
             <div className="grid grid-cols-3 gap-2 min-w-[300px]">
-              <div>
-                <span className="text-[9px] block text-center">M</span>
-                <input
-                  type="number"
-                  value={minStaff.M}
-                  onChange={(e) =>
-                    setMinStaff({ ...minStaff, M: +e.target.value })
-                  }
-                  className="w-full p-1 border rounded text-center"
-                />
-              </div>
-              <div>
-                <span className="text-[9px] block text-center">T</span>
-                <input
-                  type="number"
-                  value={minStaff.T}
-                  onChange={(e) =>
-                    setMinStaff({ ...minStaff, T: +e.target.value })
-                  }
-                  className="w-full p-1 border rounded text-center"
-                />
-              </div>
-              <div>
-                <span className="text-[9px] block text-center">N</span>
-                <input
-                  type="number"
-                  value={minStaff.N}
-                  onChange={(e) =>
-                    setMinStaff({ ...minStaff, N: +e.target.value })
-                  }
-                  className="w-full p-1 border rounded text-center"
-                />
-              </div>
+              {customShifts
+                .filter((s: CustomShift) => s.isWorkingShift)
+                .map((shift: CustomShift) => (
+                  <div key={shift.code}>
+                    <span className="text-[9px] block text-center">
+                      {shift.code}
+                    </span>
+                    <input
+                      type="number"
+                      value={minStaff[shift.code] || 0}
+                      onChange={(e) =>
+                        setMinStaff({
+                          ...minStaff,
+                          [shift.code]: +e.target.value,
+                        })
+                      }
+                      className="w-full p-1 border rounded text-center"
+                    />
+                  </div>
+                ))}
             </div>
           </div>
         </div>
@@ -939,39 +1017,26 @@ const ConfigPanel = ({
           </label>
           <div className="overflow-x-auto mb-2">
             <div className="grid grid-cols-3 gap-2 min-w-[300px]">
-              <div>
-                <span className="text-[9px] block text-center">M</span>
-                <input
-                  type="number"
-                  value={hoursConfig.M}
-                  onChange={(e) =>
-                    setHoursConfig({ ...hoursConfig, M: +e.target.value })
-                  }
-                  className="w-full p-1 border rounded text-center"
-                />
-              </div>
-              <div>
-                <span className="text-[9px] block text-center">T</span>
-                <input
-                  type="number"
-                  value={hoursConfig.T}
-                  onChange={(e) =>
-                    setHoursConfig({ ...hoursConfig, T: +e.target.value })
-                  }
-                  className="w-full p-1 border rounded text-center"
-                />
-              </div>
-              <div>
-                <span className="text-[9px] block text-center">N</span>
-                <input
-                  type="number"
-                  value={hoursConfig.N}
-                  onChange={(e) =>
-                    setHoursConfig({ ...hoursConfig, N: +e.target.value })
-                  }
-                  className="w-full p-1 border rounded text-center"
-                />
-              </div>
+              {customShifts
+                .filter((s: CustomShift) => s.isWorkingShift)
+                .map((shift: CustomShift) => (
+                  <div key={shift.code}>
+                    <span className="text-[9px] block text-center">
+                      {shift.code}
+                    </span>
+                    <input
+                      type="number"
+                      value={hoursConfig[shift.code] || shift.hours}
+                      onChange={(e) =>
+                        setHoursConfig({
+                          ...hoursConfig,
+                          [shift.code]: +e.target.value,
+                        })
+                      }
+                      className="w-full p-1 border rounded text-center"
+                    />
+                  </div>
+                ))}
             </div>
           </div>
           <div className="flex justify-between items-center">
@@ -1015,6 +1080,97 @@ const ConfigPanel = ({
         </div>
       </div>
 
+      {/* Custom Shifts Management */}
+      <div className="bg-gray-50 p-3 rounded mb-4 border space-y-3">
+        <div className="flex items-center justify-between">
+          <h4 className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
+            <Plus size={12} /> Custom Shifts
+          </h4>
+          <button
+            onClick={handleAddCustomShift}
+            className="flex items-center gap-1 bg-green-50 text-green-700 px-2 py-1 rounded text-[10px] font-bold border border-green-200 hover:bg-green-100"
+          >
+            <Plus size={12} /> Add Shift
+          </button>
+        </div>
+        <div className="space-y-2">
+          {customShifts.map((shift: CustomShift) => (
+            <div
+              key={shift.code}
+              className="flex items-center gap-2 p-2 bg-white rounded border"
+            >
+              <input
+                type="color"
+                value={shift.color}
+                onChange={(e) =>
+                  updateCustomShift(shift.code, "color", e.target.value)
+                }
+                className="w-6 h-6 p-0 border-0 rounded cursor-pointer flex-shrink-0"
+              />
+              <input
+                value={shift.code}
+                onChange={(e) => {
+                  const newCode = e.target.value.toUpperCase();
+                  if (
+                    newCode &&
+                    !customShifts.some(
+                      (s: CustomShift) =>
+                        s.code === newCode && s.code !== shift.code,
+                    )
+                  ) {
+                    updateCustomShift(shift.code, "code", newCode);
+                  }
+                }}
+                className="w-12 p-1 border rounded text-xs font-bold text-center"
+                maxLength={3}
+              />
+              <input
+                value={shift.label}
+                onChange={(e) =>
+                  updateCustomShift(shift.code, "label", e.target.value)
+                }
+                className="flex-1 p-1 border rounded text-xs"
+                placeholder="Label"
+              />
+              <input
+                type="number"
+                value={shift.hours}
+                onChange={(e) =>
+                  updateCustomShift(shift.code, "hours", +e.target.value)
+                }
+                className="w-16 p-1 border rounded text-xs text-center"
+                min="0"
+                step="0.5"
+              />
+              <label className="flex items-center gap-1 text-xs">
+                <input
+                  type="checkbox"
+                  checked={shift.isWorkingShift}
+                  onChange={(e) =>
+                    updateCustomShift(
+                      shift.code,
+                      "isWorkingShift",
+                      e.target.checked,
+                    )
+                  }
+                  className="rounded w-4 h-4"
+                />
+                Working
+              </label>
+              {!["M", "T", "N", "F"].includes(shift.code) && (
+                <button
+                  onClick={() => handleRemoveCustomShift(shift.code)}
+                  className="text-red-500 hover:text-red-700 p-1"
+                  title="Remove shift"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Shift Legends, Hours & Colors */}
       <div className="bg-gray-50 p-3 rounded mb-4 border space-y-3">
         <h4 className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1 mb-2">
@@ -1022,7 +1178,21 @@ const ConfigPanel = ({
         </h4>
         <div className="overflow-x-auto">
           <div className="space-y-2">
-            {["M", "T", "N", "F", "V", "S", "TR"].map((type) => (
+            {[
+              "M",
+              "T",
+              "N",
+              "F",
+              "V",
+              "S",
+              "TR",
+              ...customShifts
+                .filter(
+                  (s: CustomShift) =>
+                    !["M", "T", "N", "F", "V", "S", "TR"].includes(s.code),
+                )
+                .map((s: CustomShift) => s.code),
+            ].map((type) => (
               <div key={type} className="flex items-center gap-1 min-w-[400px]">
                 <input
                   type="color"
@@ -1481,6 +1651,9 @@ const ShiftScheduler = () => {
     T: "15:00 - 00:00",
     N: "23:00 - 08:00",
     TR: "Training",
+    V: "Vacation",
+    S: "Sick Leave",
+    F: "Day Off",
   });
   const [colors, setColors] = useState<any>({
     M: "#d1fae5",
@@ -1548,6 +1721,36 @@ const ShiftScheduler = () => {
     N: 8,
     target: 160,
   });
+  const [customShifts, setCustomShifts] = useState<CustomShift[]>([
+    {
+      code: "M",
+      label: "Morning",
+      hours: 8,
+      color: "#d1fae5",
+      isWorkingShift: true,
+    },
+    {
+      code: "T",
+      label: "Afternoon",
+      hours: 8,
+      color: "#ffedd5",
+      isWorkingShift: true,
+    },
+    {
+      code: "N",
+      label: "Night",
+      hours: 8,
+      color: "#1e3a8a",
+      isWorkingShift: true,
+    },
+    {
+      code: "F",
+      label: "Day Off",
+      hours: 0,
+      color: "#f3f4f6",
+      isWorkingShift: false,
+    },
+  ]);
   const [teamState, setTeamState] = useState<Employee[]>(INITIAL_TEAM);
   const [requests, setRequests] = useState<ShiftRequest[]>([]);
   // Track pending selections for editors before submission
@@ -1590,9 +1793,11 @@ const ShiftScheduler = () => {
       try {
         const app = initializeApp(FIREBASE_CONFIG);
         const auth = getAuth(app);
-        const db = initializeFirestore(app, {
-          experimentalForceLongPolling: true,
-        });
+        const db = initializeFirestore(
+          app,
+          { experimentalForceLongPolling: true },
+          FIRESTORE_DATABASE_ID,
+        );
         // Store DB instance for use in other functions
         dbRef.current = db;
 
@@ -1949,7 +2154,7 @@ const ShiftScheduler = () => {
           app = initializeApp(FIREBASE_CONFIG);
         }
 
-        const db = getFirestore(app);
+        const db = getFirestore(app, FIRESTORE_DATABASE_ID);
         const dataDocRef = doc(
           db,
           "artifacts",
@@ -2157,7 +2362,7 @@ const ShiftScheduler = () => {
         }
 
         const app = getApp();
-        const db = dbRef.current || getFirestore(app);
+        const db = dbRef.current || getFirestore(app, FIRESTORE_DATABASE_ID);
         if (!dbRef.current) dbRef.current = db;
         const dataDocRef = doc(
           db,
@@ -4144,8 +4349,12 @@ const ShiftScheduler = () => {
       const analysisCells = calendarData.map((day) => {
         const missing = day.missing[shiftCode as "M" | "T" | "N"];
         const isLowStaff = day.lowStaff[shiftCode as "M" | "T" | "N"];
+        const missingRoles =
+          day.missingRoles?.[shiftCode as "M" | "T" | "N"] || [];
         const issues = [];
         if (missing.length > 0) issues.push(`Missing: ${missing.join(",")}`);
+        if (missingRoles.length > 0)
+          issues.push(`Roles: ${missingRoles.join(",")}`);
         if (isLowStaff) issues.push(t.lowStaff);
         return issues.length > 0 ? issues.join(" | ") : "OK";
       });
@@ -4536,6 +4745,7 @@ const ShiftScheduler = () => {
           preSelectedId={preSelectedBulkId}
           shiftOptionsByRole={shiftOptionsByRole}
           onApply={handleBulkApply}
+          customShifts={customShifts}
         />
       )}
 
@@ -4571,6 +4781,7 @@ const ShiftScheduler = () => {
           customColors={colors}
           currentUserRole={currentUser.role}
           shiftOptionsByRole={shiftOptionsByRole}
+          customShifts={customShifts}
         />
       )}
 
@@ -5456,6 +5667,8 @@ const ShiftScheduler = () => {
           onReset={handleReset}
           hoursConfig={hoursConfig}
           setHoursConfig={setHoursConfig}
+          customShifts={customShifts}
+          setCustomShifts={setCustomShifts}
         />
 
         <div
@@ -5491,6 +5704,7 @@ const ShiftScheduler = () => {
               onToggleOptionalHoliday={handleToggleOptionalHoliday}
               onSelectAllOptionalHolidays={handleSelectAllOptionalHolidays}
               onClearOptionalHolidays={handleClearOptionalHolidays}
+              customShifts={customShifts}
             />
           ) : showCalendarView ? (
             <>
@@ -5714,13 +5928,15 @@ const ShiftScheduler = () => {
                           {day.allMissingRoles &&
                             day.allMissingRoles.length > 0 && (
                               <div
-                                className={`inline-flex items-center justify-center mt-1 rounded-full bg-red-100 w-5 h-5 mx-auto text-red-700 ${
-                                  currentUser.role === "manager"
+                                className={`inline-flex items-center justify-center mt-1 rounded-full bg-red-100 w-6 h-6 mx-auto text-red-700 cursor-help ${
+                                  currentUser.role === "manager" ||
+                                  currentUser.role === "admin"
                                     ? ""
-                                    : "hover:bg-red-200 transition-colors duration-150"
+                                    : "hover:bg-red-200 hover:scale-110 transition-all duration-75"
                                 }`}
                                 title={
-                                  currentUser.role === "manager"
+                                  currentUser.role === "manager" ||
+                                  currentUser.role === "admin"
                                     ? undefined
                                     : (() => {
                                         const missingByRole: Record<
@@ -5767,74 +5983,6 @@ const ShiftScheduler = () => {
                       );
                     })}
                   </tr>
-                  {/* Coverage Warning Row (manager-only) */}
-                  {currentUser.role === "manager" && (
-                    <tr className="print:hidden">
-                      <td className="sticky left-0 z-20 bg-white border-b border-r px-2 py-1 text-[11px] font-semibold text-gray-600 print:static">
-                        Coverage
-                      </td>
-                      {calendarData.map((day) => {
-                        if (
-                          !day.allMissingRoles ||
-                          day.allMissingRoles.length === 0
-                        ) {
-                          return (
-                            <td
-                              key={day.fullDate}
-                              className="p-1 md:p-1.5 border-b text-center"
-                            />
-                          );
-                        }
-
-                        const missingByRole: Record<string, string[]> = {};
-                        ["GCC", "Field Dispatch", "Remote Ops"].forEach(
-                          (role) => {
-                            const shifts: string[] = [];
-                            if (day.missingRoles.M?.includes(role))
-                              shifts.push("M");
-                            if (day.missingRoles.T?.includes(role))
-                              shifts.push("T");
-                            if (day.missingRoles.N?.includes(role))
-                              shifts.push("N");
-                            if (shifts.length > 0) {
-                              missingByRole[role] = shifts;
-                            }
-                          },
-                        );
-
-                        if (Object.keys(missingByRole).length === 0) {
-                          return (
-                            <td
-                              key={day.fullDate}
-                              className="p-1 md:p-1.5 border-b text-center"
-                            />
-                          );
-                        }
-
-                        return (
-                          <td
-                            key={day.fullDate}
-                            className="p-1.5 md:p-2 border-b bg-orange-50 text-center align-top"
-                          >
-                            <div className="space-y-1">
-                              {Object.entries(missingByRole).map(
-                                ([role, shifts]) => (
-                                  <div key={role} className="leading-tight">
-                                    <div className="text-sm md:text-base font-bold text-orange-700 tracking-wide">
-                                      {shifts.join(",")}
-                                    </div>
-                                    <div className="text-xs md:text-sm text-amber-900 font-medium">
-                                      {role}
-                                    </div>
-                                  </div>
-                                ),
-                              )}
-                            </div>
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  )}
                 </thead>
                 <tbody>
                   {filteredTeam.map((emp) => {
@@ -6117,7 +6265,14 @@ const ShiftScheduler = () => {
                               day.missing[shiftCode as "M" | "T" | "N"];
                             const isLowStaff =
                               day.lowStaff[shiftCode as "M" | "T" | "N"];
-                            const hasErr = missing.length > 0 || isLowStaff;
+                            const missingRoles =
+                              day.missingRoles?.[
+                                shiftCode as "M" | "T" | "N"
+                              ] || [];
+                            const hasErr =
+                              missing.length > 0 ||
+                              isLowStaff ||
+                              missingRoles.length > 0;
                             const isFocused = focusedDate === day.fullDate;
                             const isLastAnalysisRow = shiftIdx === 2;
                             return (
@@ -6139,11 +6294,18 @@ const ShiftScheduler = () => {
                                       size={12}
                                       className="mb-1 print:text-black"
                                     />
-                                    <span className="print:text-[8px]">
-                                      {missing.join(",")}
-                                    </span>
+                                    {missing.length > 0 && (
+                                      <span className="print:text-[8px]">
+                                        {missing.join(",")}
+                                      </span>
+                                    )}
+                                    {missingRoles.length > 0 && (
+                                      <span className="text-[10px] whitespace-nowrap">
+                                        Roles: {missingRoles.join(",")}
+                                      </span>
+                                    )}
                                     {isLowStaff && (
-                                      <span className="text-[8px] whitespace-nowrap">
+                                      <span className="text-[10px] whitespace-nowrap">
                                         {t.lowStaff}
                                       </span>
                                     )}

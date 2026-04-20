@@ -1,6 +1,6 @@
 // --- TYPE DEFINITIONS ---
 
-export type ShiftType = "M" | "T" | "N" | "F";
+export type ShiftType = string; // Allow custom shift codes
 export type OverrideType = ShiftType | "V" | "S" | "TR"; // V=Vacation, S=Sick, TR=Training
 export type Language = "EN" | "DE" | "IT" | "FR" | "PT" | "TR" | "ES";
 export type RequestStatus = "PENDING" | "APPROVED" | "REJECTED";
@@ -81,7 +81,7 @@ export interface Translations {
 
 export interface HoursConfig {
   targetHoursPerMonth: number;
-  hoursPerShift: { [key in ShiftType]: number };
+  hoursPerShift: Record<ShiftType, number>;
 }
 
 export interface ShiftLegend {
@@ -94,9 +94,12 @@ export interface ColorConfig {
   [key: string]: string;
 }
 
-export interface AccessMode {
-  role: RoleId;
+export interface CustomShift {
+  code: string;
   label: string;
+  hours: number;
+  color: string;
+  isWorkingShift: boolean; // Whether this counts as a working shift for coverage
 }
 
 // Component Props Interfaces

@@ -13,6 +13,7 @@ import type {
   NonAdminRoleId,
   OverrideType,
   ShiftOptionsByRole,
+  CustomShift,
 } from "../types";
 
 const ROLE_LABELS: Record<NonAdminRoleId, string> = {
@@ -83,16 +84,6 @@ const FEATURE_CATALOG: Array<{
   },
 ];
 
-const EDITOR_SHIFT_OPTIONS: Array<{ id: OverrideType; label: string }> = [
-  { id: "M", label: "Morning (M)" },
-  { id: "T", label: "Afternoon (T)" },
-  { id: "N", label: "Night (N)" },
-  { id: "F", label: "Day Off (F)" },
-  { id: "V", label: "Vacation (V)" },
-  { id: "S", label: "Sick Leave (S)" },
-  { id: "TR", label: "Training (TR)" },
-];
-
 interface AdminDashboardProps {
   featureToggles: FeatureToggles;
   onToggleFeature: (role: NonAdminRoleId, feature: FeatureKey) => void;
@@ -122,6 +113,7 @@ interface AdminDashboardProps {
   onToggleOptionalHoliday: (date: string, enabled: boolean) => void;
   onSelectAllOptionalHolidays: () => void;
   onClearOptionalHolidays: () => void;
+  customShifts: CustomShift[];
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -150,6 +142,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onToggleOptionalHoliday,
   onSelectAllOptionalHolidays,
   onClearOptionalHolidays,
+  customShifts,
 }) => {
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [activeRole, setActiveRole] = useState<NonAdminRoleId>("editor");
@@ -158,6 +151,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [regionalAreasExpanded, setRegionalAreasExpanded] = useState(true);
   const [optionalHolidaysExpanded, setOptionalHolidaysExpanded] =
     useState(true);
+
+  const EDITOR_SHIFT_OPTIONS: Array<{ id: OverrideType; label: string }> = [
+    ...customShifts.map((shift) => ({
+      id: shift.code as OverrideType,
+      label: `${shift.label} (${shift.code})`,
+    })),
+    { id: "V", label: "Vacation (V)" },
+    { id: "S", label: "Sick Leave (S)" },
+    { id: "TR", label: "Training (TR)" },
+  ];
 
   const visibleFeatures = FEATURE_CATALOG.filter(
     (feature) => feature.key !== "viewRequests",
